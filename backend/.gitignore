@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Uploads (user files)
+uploads/
+
+# ChromaDB data
+chroma_db/
+
+# Vector store cache
+vector_store.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
