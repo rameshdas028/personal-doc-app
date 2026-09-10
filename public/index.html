@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocVault — Personal Document Assistant</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen" class="screen">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <div class="logo-icon">📁</div>
+        <h1>DocVault</h1>
+        <p>Apne documents securely store karein</p>
+      </div>
+      <div class="auth-card">
+        <h2>Login karein</h2>
+        <p class="auth-subtitle">Phone number se OTP bhejenge</p>
+        <div class="input-group">
+          <span class="input-prefix">🇮🇳 +91</span>
+          <input id="phone-input" type="tel" placeholder="9XXXXXXXXX" maxlength="10" />
+        </div>
+        <button id="send-otp-btn" class="btn-primary">
+          <span>OTP Bhejo</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <p id="login-error" class="error-msg"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- OTP SCREEN -->
+  <div id="otp-screen" class="screen hidden">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <div class="logo-icon">🔐</div>
+        <h1>DocVault</h1>
+        <p>OTP verify karein</p>
+      </div>
+      <div class="auth-card">
+        <h2>OTP Daalein</h2>
+        <p class="auth-subtitle" id="otp-subtitle">OTP bheja gaya hai</p>
+        <div class="otp-inputs">
+          <input class="otp-box" type="text" maxlength="1" />
+          <input class="otp-box" type="text" maxlength="1" />
+          <input class="otp-box" type="text" maxlength="1" />
+          <input class="otp-box" type="text" maxlength="1" />
+        </div>
+        <input id="otp-input" type="hidden" />
+        <button id="verify-otp-btn" class="btn-primary">
+          <span>Verify Karein</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button id="back-btn" class="btn-ghost">← Wapas jao</button>
+        <p id="otp-error" class="error-msg"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT SCREEN -->
+  <div id="chat-screen" class="screen hidden">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">📁 DocVault</div>
+        <button id="sidebar-close" class="sidebar-close">✕</button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-menu-item" id="docs-menu-item">
+          <span>📋</span>
+          <span>My Documents</span>
+          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div id="doc-list" class="doc-list hidden"></div>
+      </div>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="btn-logout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Logout
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Chat -->
+    <main class="chat-main">
+      <header class="chat-header">
+        <div class="chat-header-left">
+          <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+          <div>
+            <div class="chat-title">Personal Document Assistant</div>
+            <div class="chat-status"><span class="status-dot"></span> AI Ready</div>
+          </div>
+        </div>
+        <label for="file-input" class="btn-upload" title="Document Upload karo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          Upload
+        </label>
+        <input id="file-input" type="file" accept="image/*,application/pdf" hidden />
+      </header>
+
+      <div id="chat-window" class="chat-window">
+        <!-- Welcome state -->
+        <div class="welcome-state" id="welcome-state">
+          <div class="welcome-icon">📁</div>
+          <h2>DocVault mein aapka swagat hai!</h2>
+          <p>Apne documents upload karein ya neeche se query karein</p>
+          <div class="quick-actions">
+            <div class="quick-chip" data-query="mere saare documents dikhao">📋 Saare documents</div>
+            <div class="quick-chip" data-query="aadhar dikhao">🪪 Aadhar Card</div>
+            <div class="quick-chip" data-query="pan card dikhao">💳 PAN Card</div>
+            <div class="quick-chip" data-query="driving license dikhao">🚗 Driving License</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <form id="chat-form" class="chat-input-bar">
+          <label for="file-input-2" class="attach-icon" title="File attach karo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </label>
+          <input id="file-input-2" type="file" accept="image/*,application/pdf" hidden />
+          <input id="text-input" type="text" placeholder="Kuch bhi pucho... 'Aadhar dikhao', 'PAN card chahiye'" autocomplete="off" />
+          <button type="submit" class="send-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </form>
+        <p class="input-hint">AI se natural language mein pucho — Hindi ya English dono chalega</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- DELETE CONFIRM MODAL -->
+  <div id="delete-modal" class="modal hidden">
+    <div class="modal-backdrop" id="delete-backdrop"></div>
+    <div class="modal-card" style="max-width:320px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">🗑️</div>
+      <h3 style="margin-bottom:8px">Delete Document?</h3>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:20px">This action cannot be undone.</p>
+      <div style="display:flex;gap:10px">
+        <button id="delete-cancel-btn" class="btn-ghost" style="flex:1;border:1px solid var(--border);border-radius:10px">Cancel</button>
+        <button id="delete-confirm-btn" class="btn-primary" style="flex:1;background:var(--error)">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNKNOWN DOC MODAL -->
+  <div id="unknown-modal" class="modal hidden">
+    <div class="modal-backdrop" id="unknown-backdrop"></div>
+    <div class="modal-card" style="max-width:340px">
+      <div style="font-size:36px;margin-bottom:12px;text-align:center">🤔</div>
+      <h3 style="margin-bottom:8px;text-align:center">Yeh document kya hai?</h3>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:16px;text-align:center">Hum samajh nahi paye — ek line mein batao</p>
+      <input id="unknown-answer" type="text" placeholder="e.g. Mera insurance card" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;outline:none;margin-bottom:16px" />
+      <div style="display:flex;gap:10px">
+        <button id="unknown-cancel-btn" class="btn-ghost" style="flex:1;border:1px solid var(--border);border-radius:10px">Cancel</button>
+        <button id="unknown-confirm-btn" class="btn-primary" style="flex:1">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOAD MODAL -->
+  <div id="upload-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📎 Document Upload</h3>
+        <button id="cancel-upload-btn" class="modal-close">✕</button>
+      </div>
+
+      <div class="file-preview" id="file-preview">
+        <div class="file-icon">📄</div>
+        <div class="file-name" id="file-name-display">file.pdf</div>
+      </div>
+
+      <div class="form-group">
+        <label>Document Type</label>
+        <div class="doc-type-grid">
+          <div class="doc-type-option selected" data-value="aadhar">🪪<span>Aadhar</span></div>
+          <div class="doc-type-option" data-value="pan">💳<span>PAN Card</span></div>
+          <div class="doc-type-option" data-value="driving_license">🚗<span>Driving License</span></div>
+          <div class="doc-type-option" data-value="passport">📘<span>Passport</span></div>
+          <div class="doc-type-option" data-value="passport_photo">🖼️<span>Photo</span></div>
+          <div class="doc-type-option" data-value="medical_slip">🏥<span>Medical Slip</span></div>
+          <div class="doc-type-option" data-value="other">📁<span>Other</span></div>
+        </div>
+        <input type="hidden" id="doc-type-select" value="aadhar" />
+      </div>
+
+      <div id="label-field" class="form-group hidden">
+        <label>Yeh kiska photo hai? <span class="required">*</span></label>
+        <input id="label-input" type="text" placeholder="Naam likhein (e.g. Rahul, Papa)" />
+        <label style="margin-top:10px">Extra Info <span class="optional">(optional)</span></label>
+        <input id="info-input" type="text" placeholder="Koi extra jaankari" />
+      </div>
+
+      <button id="confirm-upload-btn" class="btn-primary" style="width:100%;margin-top:8px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Upload Karo
+      </button>
+      <p id="upload-error" class="error-msg" style="margin-top:8px"></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
