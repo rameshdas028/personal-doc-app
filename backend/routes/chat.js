@@ -6,21 +6,27 @@ const { getChatModel } = require('../llm');
 
 const router = express.Router();
 
-async function parseIntent(message) {
+async function parseIntent(message, history = []) {
   const model = getChatModel();
+  const historyContext = history.length
+    ? `\nRecent conversation:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n')}\n`
+    : '';
   const result = await model.invoke([
-    new SystemMessage(`You are a document vault assistant. Analyze the user's message.
-The user may have spelling mistakes — correct them before analyzing.
+    new SystemMessage(`You are a document vault assistant. Analyze the user's message using conversation history for context.
+The user may have spelling mistakes — correct them before analyzing.${historyContext}
 Respond ONLY with this JSON:
 {
-  "wants_file": <true if user is asking for any document/file>,
-  "search_query": "<semantic search query — correct any spelling mistakes, include person name if mentioned, doc type, purpose. e.g. 'ramesh resume CV' or 'aadhar card identity'>",
-  "doc_type_hint": "<exact doc type if clearly mentioned e.g. resume, photo, passport, aadhar, pan, driving license — else null>",
-  "person_name": "<person's name if mentioned — correct spelling mistakes e.g. 'megna'→'Meghna', 'ramsh'→'Ramesh' — else null>",
-  "person_name_variants": ["<list of possible spelling variants of the name — e.g. ['Meghna','Megna','Mehna','Meg'] — empty array if no name>"],
-  "confident": <true if you understand what they want, false if completely unclear>,
-  "folder_query": "<category name if user is asking what's inside a folder/category — e.g. 'other', 'education', 'identity', 'medical', 'bills', 'vehicle', 'insurance', 'legal' — else null>",
-  "asking_category": <true if user is asking which category/folder a document belongs to — e.g. 'yeh kaun si category mein hai', 'this belongs to which folder' — else false>
+  "wants_file": <true if user wants a SINGLE specific document>,
+  "wants_list": <true if user wants to SEE MULTIPLE documents as a list/grid — e.g. 'saare documents dikhao', 'bills aur medical dikhao', 'sab dikhao', 'show all', 'list karo'>,
+  "categories": ["<list of category names user mentioned — e.g. ['education','medical','bills'] — empty if none>"],
+  "doc_types": ["<list of specific doc types mentioned — e.g. ['aadhar','pan','driving license'] — empty if none>"],
+  "search_query": "<semantic search query — correct spelling, include person name, doc type>",
+  "doc_type_hint": "<single doc type if ONE specific doc clearly mentioned — else null>",
+  "person_name": "<person name if mentioned — else null>",
+  "person_name_variants": ["<spelling variants of name — empty if no name>"],
+  "confident": <true if intent is clear>,
+  "folder_query": "<category name if user asks what's inside ONE folder — e.g. 'education' — else null>",
+  "asking_category": <true if user asks which folder/category a doc belongs to>
 }
 Respond with ONLY the JSON, no extra text.`),
     new HumanMessage(message)
@@ -31,12 +37,12 @@ Respond with ONLY the JSON, no extra text.`),
       .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
     return JSON.parse(clean);
   } catch {
-    return { wants_file: true, search_query: message, doc_type_hint: null, person_name: null, person_name_variants: [], confident: true };
+    return { wants_file: true, wants_list: false, categories: [], doc_types: [], search_query: message, doc_type_hint: null, person_name: null, person_name_variants: [], confident: true };
   }
 }
 
 router.post('/', authMiddleware, async (req, res) => {
-  const { message, clarification, last_category, last_folder_docs } = req.body;
+  const { message, clarification, last_category, last_folder_docs, history } = req.body;
   const userId = req.userId;
   if (!message) return res.status(400).json({ error: 'message is required' });
 
@@ -44,7 +50,51 @@ router.post('/', authMiddleware, async (req, res) => {
     const model = getChatModel();
     const queryToSearch = clarification ? `${message} ${clarification}` : message;
 
-    const intent = await parseIntent(queryToSearch);
+    const intent = await parseIntent(queryToSearch, history || []);
+
+    // ── WANTS LIST: user wants multiple docs as grid ──────────────────────
+    if (intent.wants_list || (intent.categories?.length > 0 && !intent.wants_file)) {
+      const allDocs = await getDocumentsByUser(userId);
+      let matchedDocs = allDocs;
+
+      // Filter by categories if specified
+      if (intent.categories?.length > 0) {
+        matchedDocs = allDocs.filter(d =>
+          intent.categories.some(c => (d.category || 'other').toLowerCase().includes(c.toLowerCase()))
+        );
+      }
+
+      // Filter by doc_types if specified
+      if (intent.doc_types?.length > 0) {
+        const byType = allDocs.filter(d =>
+          intent.doc_types.some(t =>
+            (d.doc_type || '').toLowerCase().includes(t.toLowerCase()) ||
+            (d.label || '').toLowerCase().includes(t.toLowerCase()) ||
+            (d.group_name || '').toLowerCase().includes(t.toLowerCase())
+          )
+        );
+        // Merge with category matches (union)
+        const ids = new Set(matchedDocs.map(d => d.doc_id));
+        byType.forEach(d => { if (!ids.has(d.doc_id)) matchedDocs.push(d); });
+      }
+
+      if (!matchedDocs.length) {
+        return res.json({ reply: 'Koi matching document nahi mila.', matched: false });
+      }
+
+      const label = intent.categories?.length
+        ? intent.categories.join(' + ')
+        : intent.doc_types?.length
+          ? intent.doc_types.join(' + ')
+          : 'All';
+
+      return res.json({
+        reply: `**${label}** — ${matchedDocs.length} document${matchedDocs.length > 1 ? 's' : ''} mila${matchedDocs.length > 1 ? 'e' : ''}:`,
+        folder_docs: matchedDocs.map(d => ({ doc_id: d.doc_id, label: d.label || d.doc_type, doc_type: d.doc_type, mimetype: d.mimetype, file_url: d.file_url, category: d.category || 'other', period: d.period || '' })),
+        folder_used: label,
+        matched: false
+      });
+    }
 
     // "pura dikhao" / "show document" with folder context
     const showDocWords = ['pura dikhao', 'pura document', 'show document', 'dikhao', 'open karo', 'show karo', 'dekhhna', 'dekhna'];
@@ -110,7 +160,7 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.json({
         reply: result.content,
         folder_used: intent.folder_query,
-        folder_docs: folderDocs.map(d => ({ doc_id: d.doc_id, label: d.label || d.doc_type })),
+        folder_docs: folderDocs.map(d => ({ doc_id: d.doc_id, label: d.label || d.doc_type, doc_type: d.doc_type, mimetype: d.mimetype, file_url: d.file_url, category: d.category || 'other', period: d.period || '' })),
         matched: false
       });
     }
@@ -182,6 +232,9 @@ router.post('/', authMiddleware, async (req, res) => {
         ? `\n\nDocument context from user's vault:\nType: ${contextDoc.doc_type}\nDescription: ${contextDoc.ai_description}\nFull extracted text: ${contextDoc.extracted_text}`
         : '';
 
+      const historyMessages = (history || []).map(m =>
+        m.role === 'user' ? new HumanMessage(m.text) : new SystemMessage(m.text)
+      );
       const result = await model.invoke([
         new SystemMessage(`You are a helpful personal document assistant. Reply in same language as user.
 Rules:
@@ -190,6 +243,7 @@ Rules:
 - Use bullet points ONLY if there are actual multiple items to list — never use empty bullets
 - Keep response short and clear — max 5 lines
 - If answer is not in the document context, say so honestly${docContext}`),
+        ...historyMessages,
         new HumanMessage(queryToSearch)
       ]);
       reply = result.content;
