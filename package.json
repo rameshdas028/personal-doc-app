@@ -1,0 +1,10 @@
+{
+  "name": "personal-doc-app",
+  "version": "1.0.0",
+  "scripts": {
+    "backend": "cd backend && npm start",
+    "frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "deploy": "git add -A && git commit -m 'deploy' && git push"
+  }
+}
