@@ -1,8 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { User } = require('../db');
-
+const User = require('../models/userModel');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-this-in-production';
@@ -10,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-this-in-producti
 const otpStore = {};
 function generateOtp() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
-// ── SIGNUP ──────────────────────────────────────────────
+// POST /api/auth/signup
 router.post('/signup', async (req, res) => {
   const { firstName, lastName, phone, password } = req.body;
   if (!firstName || !lastName) return res.status(400).json({ error: 'First and last name required' });
@@ -27,7 +26,7 @@ router.post('/signup', async (req, res) => {
   res.json({ success: true, token, user: { id: user._id.toString(), phone: user.phone, firstName: user.firstName, lastName: user.lastName } });
 });
 
-// ── LOGIN ───────────────────────────────────────────────
+// POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { phone, password } = req.body;
   if (!phone || !password) return res.status(400).json({ error: 'Phone and password required' });
@@ -42,7 +41,7 @@ router.post('/login', async (req, res) => {
   res.json({ success: true, token, user: { id: user._id.toString(), phone: user.phone, firstName: user.firstName, lastName: user.lastName } });
 });
 
-// ── FORGOT PASSWORD — send OTP ──────────────────────────
+// POST /api/auth/forgot-password
 router.post('/forgot-password', async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Phone number required' });
@@ -53,11 +52,11 @@ router.post('/forgot-password', async (req, res) => {
   const otp = generateOtp();
   await User.updateOne({ phone }, { resetOtp: otp, resetOtpExp: new Date(Date.now() + 5 * 60 * 1000) });
 
-  console.log(`[DEV MODE] Reset OTP for ${phone}: ${otp}`);
+  console.log(`[DEV] Reset OTP for ${phone}: ${otp}`);
   res.json({ success: true, message: 'OTP sent', dev_otp: otp });
 });
 
-// ── RESET PASSWORD — verify OTP + set new password ─────
+// POST /api/auth/reset-password
 router.post('/reset-password', async (req, res) => {
   const { phone, otp, newPassword } = req.body;
   if (!phone || !otp || !newPassword) return res.status(400).json({ error: 'All fields required' });
@@ -70,21 +69,7 @@ router.post('/reset-password', async (req, res) => {
 
   const hashed = await bcrypt.hash(newPassword, 10);
   await User.updateOne({ phone }, { password: hashed, resetOtp: null, resetOtpExp: null });
-
   res.json({ success: true, message: 'Password reset successful' });
 });
 
-// ── AUTH MIDDLEWARE ─────────────────────────────────────
-function authMiddleware(req, res, next) {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Missing token' });
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-}
-
-module.exports = { router, authMiddleware };
+module.exports = router;

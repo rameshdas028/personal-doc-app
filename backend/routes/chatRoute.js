@@ -1,8 +1,8 @@
 const express = require('express');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
-const { authMiddleware } = require('./auth');
-const { searchDocuments, getDocumentsByUser } = require('../vectorStore');
-const { getChatModel } = require('../llm');
+const authMiddleware = require('../middleware/authMiddleware');
+const { searchDocuments, getDocumentsByUser } = require('../services/vectorStoreService');
+const { getChatModel } = require('../services/llmService');
 
 const router = express.Router();
 
@@ -102,7 +102,7 @@ router.post('/', authMiddleware, async (req, res) => {
     if (last_folder_docs?.length && !intent.folder_query && showDocWords.some(w => queryToSearch.toLowerCase().includes(w))) {
       if (last_folder_docs.length === 1) {
         // Only 1 doc — directly return it
-        const { getDocumentById } = require('../vectorStore');
+        const { getDocumentById } = require('../services/vectorStoreService');
         const doc = await getDocumentById(last_folder_docs[0].doc_id, userId);
         if (doc) {
           return res.json({

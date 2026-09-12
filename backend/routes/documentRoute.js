@@ -4,10 +4,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { authMiddleware } = require('./auth');
-const { upsertDocument, removeDocument, getDocumentsByUser, getDocumentByHash, getDocumentsByType, getDocumentById } = require('../vectorStore');
-const { WorkspaceMember } = require('../db');
-const { analyzeFile } = require('../aiAnalyzer');
+const authMiddleware = require('../middleware/authMiddleware');
+const { upsertDocument, removeDocument, getDocumentsByUser, getDocumentByHash, getDocumentsByType, getDocumentById } = require('../services/vectorStoreService');
+const { WorkspaceMember } = require('../models/workspaceModel');
+const { analyzeFile } = require('../services/aiAnalyzerService');
 
 const router = express.Router();
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
