@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import ChatScreen from '@/components/ChatScreen';
 
+
 export default function ChatPage() {
   const { token } = useAuthStore();
   const router = useRouter();
