@@ -18,7 +18,7 @@ Respond ONLY in this exact JSON format:
   "description": "<1-line summary e.g. 'HP Gas Bill for Feb 2025 — Ramesh Kumar'>",
   "extracted_text": "<ALL text: name, ID numbers, DOB, address, issuer, doctor, hospital, amounts, dates — everything>",
   "questions": [],
-  "crop": <null if image is already clean/cropped — OR {"left": <0-100>, "top": <0-100>, "right": <0-100>, "bottom": <0-100>} percentage values of the document bounding box within the image — use this when document is surrounded by background, table, hand, or other noise>
+  "crop": <null if image is already tightly cropped to content — OR {"left": <0-100>, "top": <0-100>, "right": <0-100>, "bottom": <0-100>} percentage bounding box of ONLY the information/text/data portion — exclude: blank margins, decorative borders, logos, watermarks, background noise, hands, table surface, empty whitespace — keep: all text fields, numbers, photos embedded in document, stamps, signatures>
 }
 
 Rules:
@@ -28,7 +28,7 @@ Rules:
 - extracted_text must be thorough — used for search
 - For unknown docs: invent a descriptive snake_case doc_type — NEVER use 'other'
 - If genuinely unreadable: confident: false, questions: ["What is this document?"]
-- crop: detect the tight bounding box of just the document/card/paper — ignore background, hands, table surface, shadows
+- crop: detect the tight bounding box of ONLY the information/data/text portion — cut blank margins, decorative borders, empty whitespace, background, hands, table — preserve all readable content, embedded photos, stamps, signatures
 - Respond with ONLY the JSON, no extra text`;
 
 function parseResponse(text) {
@@ -40,35 +40,30 @@ function parseResponse(text) {
   return parsed;
 }
 
-// Smart crop using AI-detected bounding box (percentage-based)
-async function smartCrop(filepath, crop) {
-  if (!crop) return; // no crop needed
+// Smart crop: sharp trim() removes blank margins automatically — no AI coordinates needed
+async function smartCrop(filepath) {
   try {
-    const { left, top, right, bottom } = crop;
-    // Validate percentages
-    if ([left, top, right, bottom].some(v => typeof v !== 'number' || v < 0 || v > 100)) return;
-    if (right <= left || bottom <= top) return;
-
     const meta = await sharp(filepath).metadata();
     const w = meta.width, h = meta.height;
 
-    // Add 1% padding so edges aren't cut
-    const pad = 1;
-    const cropLeft   = Math.max(0, Math.floor((left - pad) / 100 * w));
-    const cropTop    = Math.max(0, Math.floor((top - pad) / 100 * h));
-    const cropRight  = Math.min(w, Math.ceil((right + pad) / 100 * w));
-    const cropBottom = Math.min(h, Math.ceil((bottom + pad) / 100 * h));
-    const cropW = cropRight - cropLeft;
-    const cropH = cropBottom - cropTop;
-
-    if (cropW < 50 || cropH < 50) return; // too small, skip
-
-    const cropped = await sharp(filepath)
-      .extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH })
+    // Step 1: trim white/light background margins (threshold 30 = aggressive trim)
+    // Step 2: sharpen for better readability
+    const trimmed = await sharp(filepath)
+      .trim({ threshold: 30 })
+      .sharpen({ sigma: 0.8 })
       .toBuffer();
 
-    fs.writeFileSync(filepath, cropped);
-    console.log(`[SmartCrop] Cropped ${w}x${h} → ${cropW}x${cropH}`);
+    // Only save if result is reasonably sized (not over-trimmed)
+    const trimMeta = await sharp(trimmed).metadata();
+    const minDim = Math.min(trimMeta.width, trimMeta.height);
+    const origMin = Math.min(w, h);
+
+    if (minDim > 80 && trimMeta.width > 100 && trimMeta.height > 100 && minDim > origMin * 0.2) {
+      fs.writeFileSync(filepath, trimmed);
+      console.log(`[SmartCrop] ${w}x${h} → ${trimMeta.width}x${trimMeta.height}`);
+    } else {
+      console.log('[SmartCrop] Trim result too small, skipping');
+    }
   } catch (e) {
     console.warn('[SmartCrop] Failed:', e.message);
   }
@@ -116,10 +111,9 @@ async function analyzePdf(filepath) {
 
 async function analyzeFile(filepath, mimetype) {
   if (mimetype === 'application/pdf') return await analyzePdf(filepath);
-  const result = await analyzeImage(filepath, mimetype);
-  // Auto-crop if AI detected document bounding box
-  if (result.crop) await smartCrop(filepath, result.crop);
-  return result;
+  // Auto-crop blank margins before analysis for better OCR
+  await smartCrop(filepath);
+  return await analyzeImage(filepath, mimetype);
 }
 
 module.exports = { analyzeFile };
