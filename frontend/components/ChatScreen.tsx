@@ -46,27 +46,128 @@ export interface Workspace {
 type MessageStore = Record<string, Message[]>;
 
 // ── Home landing page — shown when back is clicked ─────────────────────────────────
-function HomeView({ workspaces, onSelect }: { workspaces: Workspace[]; onSelect: (ws: Workspace | null) => void }) {
+function HomeView({ workspaces, onSelect, onLogout, onWorkspaceCreated }: {
+  workspaces: Workspace[];
+  onSelect: (ws: Workspace | null) => void;
+  onLogout: () => void;
+  onWorkspaceCreated: (ws: Workspace) => void;
+}) {
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [showJoin, setShowJoin] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [error, setError] = useState('');
+
+  function getToken() {
+    try { return JSON.parse(localStorage.getItem('auth') || '{}').state?.token || ''; } catch { return ''; }
+  }
+
+  async function createWs() {
+    if (!newName.trim()) return;
+    try {
+      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workspaces`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      onWorkspaceCreated(d.workspace);
+      setNewName(''); setShowNew(false); setError('');
+    } catch (e: any) { setError(e.message); }
+  }
+
+  async function joinWs() {
+    if (!joinCode.trim()) return;
+    try {
+      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workspaces/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ invite_code: joinCode.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      onWorkspaceCreated(d.workspace);
+      setJoinCode(''); setShowJoin(false); setError('');
+    } catch (e: any) { setError(e.message); }
+  }
+
   const allItems = [
     { ws: null as Workspace | null, name: 'My Drive', sub: 'Your personal documents', icon: '🏠', color: 'var(--gradient)' },
     ...workspaces.map(ws => ({ ws, name: ws.name, sub: `${ws.role} · shared workspace`, icon: '👥', color: 'var(--accent)' })),
   ];
+
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px' }}>
-      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Good day! 👋</div>
-      <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 28 }}>Select a drive to start chatting</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
-        {allItems.map((item, i) => (
-          <div key={item.ws?.id ?? 'personal'} onClick={() => onSelect(item.ws)}
-            style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 18px', cursor: 'pointer', transition: 'all 0.18s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(124,111,239,0.15)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
-          >
-            <div style={{ width: 48, height: 48, borderRadius: 14, background: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 14 }}>{item.icon}</div>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{item.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{item.sub}</div>
-          </div>
-        ))}
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
+      {/* Top bar */}
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📁</div>
+        <div style={{ flex: 1, fontSize: 16, fontWeight: 700 }}>ilovemydoc</div>
+        <button onClick={onLogout}
+          style={{ padding: '7px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--error)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--error)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+        >Logout</button>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 28px' }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Good day! 👋</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 28 }}>Select a drive to start chatting</div>
+
+        {/* Drive cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14, marginBottom: 32 }}>
+          {allItems.map(item => (
+            <div key={item.ws?.id ?? 'personal'} onClick={() => onSelect(item.ws)}
+              style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 18px', cursor: 'pointer', transition: 'all 0.18s' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(124,111,239,0.15)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+            >
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 14 }}>{item.icon}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{item.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{item.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* New / Join workspace */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {!showNew && !showJoin && (
+            <>
+              <button onClick={() => setShowNew(true)}
+                style={{ padding: '10px 18px', borderRadius: 10, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; }}
+              >＋ New workspace</button>
+              <button onClick={() => setShowJoin(true)}
+                style={{ padding: '10px 18px', borderRadius: 10, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; }}
+              >🔑 Join workspace</button>
+            </>
+          )}
+          {showNew && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Workspace name" autoFocus
+                style={{ background: 'var(--bg2)', border: '1px solid var(--accent)', borderRadius: 9, padding: '9px 14px', fontSize: 13, color: 'var(--text)', outline: 'none', width: 200 }}
+                onKeyDown={e => e.key === 'Enter' && createWs()}
+              />
+              <button onClick={createWs} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Create</button>
+              <button onClick={() => { setShowNew(false); setError(''); }} style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          )}
+          {showJoin && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="Enter invite code" autoFocus
+                style={{ background: 'var(--bg2)', border: '1px solid var(--accent)', borderRadius: 9, padding: '9px 14px', fontSize: 13, color: 'var(--text)', outline: 'none', width: 200 }}
+                onKeyDown={e => e.key === 'Enter' && joinWs()}
+              />
+              <button onClick={joinWs} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Join</button>
+              <button onClick={() => { setShowJoin(false); setError(''); }} style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          )}
+        </div>
+        {error && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{error}</div>}
       </div>
     </div>
   );
@@ -81,7 +182,7 @@ export default function ChatScreen() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
-  const [view, setView] = useState<'home' | 'chat' | 'drive'>('chat'); // 'chat' = default after login
+  const [view, setView] = useState<'home' | 'chat' | 'drive'>('home');
   const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string; question: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const lastCategoryRef = useRef<string | null>(null);
@@ -216,33 +317,31 @@ export default function ChatScreen() {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
 
-      {/* Permanent left sidebar */}
-      <Sidebar
-        phone={phone!}
-        workspaces={workspaces}
-        activeWorkspace={view === 'home' ? undefined : activeWorkspace}
-        onSelect={(ws) => { setActiveWorkspace(ws); setView('chat'); }}
-        onLogout={logout}
-        onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); setView('chat'); }}
-      />
+      {/* HOME VIEW — full screen workspace list, no sidebar */}
+      {view === 'home' && (
+        <HomeView
+          workspaces={workspaces}
+          onSelect={(ws) => { setActiveWorkspace(ws); setView('chat'); }}
+          onLogout={logout}
+          onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); setView('chat'); }}
+        />
+      )}
 
-      {/* Right panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}>
-
-        {/* ── HOME VIEW: workspace grid landing page ── */}
-        {view === 'home' && (
-          <HomeView
+      {/* CHAT / DRIVE VIEW — sidebar + right panel */}
+      {view !== 'home' && (
+        <>
+          <Sidebar
+            phone={phone!}
             workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
             onSelect={(ws) => { setActiveWorkspace(ws); setView('chat'); }}
+            onLogout={logout}
+            onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); setView('chat'); }}
           />
-        )}
 
-        {/* ── CHAT / DRIVE VIEW ── */}
-        {view !== 'home' && (
-          <>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}>
             {/* Header */}
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              {/* Back button */}
               <button onClick={() => setView('home')}
                 style={{ width: 36, height: 36, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text2)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--text)'; }}
@@ -251,11 +350,9 @@ export default function ChatScreen() {
               <div style={{ width: 40, height: 40, borderRadius: '50%', background: activeWorkspace ? 'var(--accent)' : 'var(--gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{wsIcon}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{wsName}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                  {activeWorkspace ? `${activeWorkspace.role} · ${docs.length} docs` : `${docs.length} documents`}
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{activeWorkspace ? `${activeWorkspace.role} · ${docs.length} docs` : `${docs.length} documents`}</div>
               </div>
-              <button onClick={() => setView(view === 'drive' ? 'chat' : 'drive')} title="Browse files"
+              <button onClick={() => setView(view === 'drive' ? 'chat' : 'drive')}
                 style={{ width: 36, height: 36, background: view === 'drive' ? 'var(--accent-soft)' : 'var(--bg3)', border: `1px solid ${view === 'drive' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}
               >🗂️</button>
               <button onClick={toggle}
@@ -290,9 +387,9 @@ export default function ChatScreen() {
                 />
               </>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
