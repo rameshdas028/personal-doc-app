@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const fs = require('fs');
+const sharp = require('sharp');
 const { getChatModel } = require('./llm');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 
@@ -16,7 +17,8 @@ Respond ONLY in this exact JSON format:
   "confident": <true or false>,
   "description": "<1-line summary e.g. 'HP Gas Bill for Feb 2025 — Ramesh Kumar'>",
   "extracted_text": "<ALL text: name, ID numbers, DOB, address, issuer, doctor, hospital, amounts, dates — everything>",
-  "questions": []
+  "questions": [],
+  "crop": <null if image is already clean/cropped — OR {"left": <0-100>, "top": <0-100>, "right": <0-100>, "bottom": <0-100>} percentage values of the document bounding box within the image — use this when document is surrounded by background, table, hand, or other noise>
 }
 
 Rules:
@@ -26,6 +28,7 @@ Rules:
 - extracted_text must be thorough — used for search
 - For unknown docs: invent a descriptive snake_case doc_type — NEVER use 'other'
 - If genuinely unreadable: confident: false, questions: ["What is this document?"]
+- crop: detect the tight bounding box of just the document/card/paper — ignore background, hands, table surface, shadows
 - Respond with ONLY the JSON, no extra text`;
 
 function parseResponse(text) {
@@ -35,6 +38,40 @@ function parseResponse(text) {
   if (parsed.doc_type) parsed.doc_type = parsed.doc_type.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   if (!parsed.doc_type) parsed.doc_type = 'document';
   return parsed;
+}
+
+// Smart crop using AI-detected bounding box (percentage-based)
+async function smartCrop(filepath, crop) {
+  if (!crop) return; // no crop needed
+  try {
+    const { left, top, right, bottom } = crop;
+    // Validate percentages
+    if ([left, top, right, bottom].some(v => typeof v !== 'number' || v < 0 || v > 100)) return;
+    if (right <= left || bottom <= top) return;
+
+    const meta = await sharp(filepath).metadata();
+    const w = meta.width, h = meta.height;
+
+    // Add 1% padding so edges aren't cut
+    const pad = 1;
+    const cropLeft   = Math.max(0, Math.floor((left - pad) / 100 * w));
+    const cropTop    = Math.max(0, Math.floor((top - pad) / 100 * h));
+    const cropRight  = Math.min(w, Math.ceil((right + pad) / 100 * w));
+    const cropBottom = Math.min(h, Math.ceil((bottom + pad) / 100 * h));
+    const cropW = cropRight - cropLeft;
+    const cropH = cropBottom - cropTop;
+
+    if (cropW < 50 || cropH < 50) return; // too small, skip
+
+    const cropped = await sharp(filepath)
+      .extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH })
+      .toBuffer();
+
+    fs.writeFileSync(filepath, cropped);
+    console.log(`[SmartCrop] Cropped ${w}x${h} → ${cropW}x${cropH}`);
+  } catch (e) {
+    console.warn('[SmartCrop] Failed:', e.message);
+  }
 }
 
 async function analyzeImage(filepath, mimetype) {
@@ -79,7 +116,10 @@ async function analyzePdf(filepath) {
 
 async function analyzeFile(filepath, mimetype) {
   if (mimetype === 'application/pdf') return await analyzePdf(filepath);
-  return await analyzeImage(filepath, mimetype);
+  const result = await analyzeImage(filepath, mimetype);
+  // Auto-crop if AI detected document bounding box
+  if (result.crop) await smartCrop(filepath, result.crop);
+  return result;
 }
 
 module.exports = { analyzeFile };
