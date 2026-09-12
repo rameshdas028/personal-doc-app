@@ -66,6 +66,69 @@ body {
   outline: none !important;
 }
 
+/* ── Responsive layout ── */
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Desktop: side by side */
+.left-panel {
+  width: 360px;
+  flex-shrink: 0;
+  height: 100vh;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+  background: var(--bg);
+}
+
+/* Mobile: full screen, one panel at a time */
+@media (max-width: 767px) {
+  .left-panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    z-index: 10;
+    transform: translateX(0);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  }
+  .left-panel.hidden {
+    transform: translateX(-100%);
+  }
+  .right-panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  }
+  .right-panel.active {
+    transform: translateX(0);
+  }
+}
+
+.back-btn {
+  display: none;
+}
+@media (max-width: 767px) {
+  .back-btn {
+    display: flex;
+    align-items: center;
+  }
+}
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

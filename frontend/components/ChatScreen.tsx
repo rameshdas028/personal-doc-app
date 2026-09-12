@@ -98,7 +98,7 @@ function LeftPanel({ phone, workspaces, activeId, onSelect, onLogout, onWorkspac
   ];
 
   return (
-    <div style={{ width: 360, flexShrink: 0, height: '100vh', background: 'var(--bg2)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100vh', background: 'var(--bg2)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', width: '100%' }}>
 
       {/* Header */}
       <div style={{ padding: '10px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
@@ -218,6 +218,7 @@ export default function ChatScreen() {
   const [activeId, setActiveId] = useState<string | null>('personal');
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [showDrive, setShowDrive] = useState(false);
+  const [showChat, setShowChat] = useState(false); // mobile: show right panel
   const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string; question: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const lastCategoryRef = useRef<string | null>(null);
@@ -265,6 +266,7 @@ export default function ChatScreen() {
     setActiveId(id);
     setActiveWorkspace(ws);
     setShowDrive(false);
+    setShowChat(true); // mobile: slide to chat
   }
 
   async function sendMessage(text: string, clarification?: string) {
@@ -339,61 +341,71 @@ export default function ChatScreen() {
   const activeName = activeWorkspace?.name ?? (activeId === 'personal' ? 'My Drive' : '');
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+    <div className="app-layout">
 
       {/* LEFT — WhatsApp sidebar */}
-      <LeftPanel
-        phone={phone!}
-        workspaces={workspaces}
-        activeId={activeId}
-        onSelect={selectChat}
-        onLogout={logout}
-        onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); selectChat(ws.id, ws); }}
-        messageStore={messageStore}
-      />
+      <div className={`left-panel${showChat ? ' hidden' : ''}`}>
+        <LeftPanel
+          phone={phone!}
+          workspaces={workspaces}
+          activeId={activeId}
+          onSelect={selectChat}
+          onLogout={logout}
+          onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); selectChat(ws.id, ws); }}
+          messageStore={messageStore}
+        />
+      </div>
 
-      {/* RIGHT — chat or empty */}
-      {!activeId ? <EmptyPanel /> : (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
+      {/* RIGHT — chat */}
+      <div className={`right-panel${showChat ? ' active' : ''}`}>
+        {!activeId ? <EmptyPanel /> : (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
 
-          {/* Chat header */}
-          <div style={{ padding: '10px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
-            <Avatar name={activeName} size={40} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{activeName}</div>
-              <div style={{ fontSize: 12, color: 'var(--accent)' }}>{docs.length} documents</div>
+            {/* Chat header */}
+            <div style={{ padding: '10px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+              {/* Back button — mobile only */}
+              <button onClick={() => setShowChat(false)} className="back-btn"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', padding: '4px 8px 4px 0' }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              </button>
+              <Avatar name={activeName} size={40} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{activeName}</div>
+                <div style={{ fontSize: 12, color: 'var(--accent)' }}>{docs.length} documents</div>
+              </div>
+              <button onClick={() => setShowDrive(v => !v)}
+                style={{ background: showDrive ? 'var(--accent)' : 'none', border: 'none', cursor: 'pointer', color: showDrive ? '#fff' : 'var(--text2)', padding: '6px 10px', borderRadius: 8, fontSize: 13, fontWeight: 500 }}
+              >🗂️</button>
             </div>
-            <button onClick={() => setShowDrive(v => !v)}
-              style={{ background: showDrive ? 'var(--accent)' : 'none', border: 'none', cursor: 'pointer', color: showDrive ? '#fff' : 'var(--text2)', padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 500 }}
-            >🗂️ Files</button>
-          </div>
 
-          {/* Body */}
-          {showDrive ? (
-            <DocListPanel
-              docs={docs} token={token!}
-              workspaces={workspaces} activeWorkspace={activeWorkspace}
-              onSwitchWorkspace={(ws) => { setActiveWorkspace(ws); }}
-              onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); }}
-              onBack={() => setShowDrive(false)}
-              onQuery={(q) => { setShowDrive(false); sendMessage(q); }}
-              onDelete={deleteDoc} onFavourite={toggleFavourite}
-            />
-          ) : (
-            <>
-              <ChatWindow messages={messages} token={token!} />
-              <ChatInput
-                onSend={(text) => {
-                  if (pendingClarification) sendMessage(pendingClarification.originalMessage, text);
-                  else sendMessage(text);
-                }}
-                onFile={handleFile}
-                disabled={uploading}
+            {/* Body */}
+            {showDrive ? (
+              <DocListPanel
+                docs={docs} token={token!}
+                workspaces={workspaces} activeWorkspace={activeWorkspace}
+                onSwitchWorkspace={(ws) => { setActiveWorkspace(ws); }}
+                onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); }}
+                onBack={() => setShowDrive(false)}
+                onQuery={(q) => { setShowDrive(false); sendMessage(q); }}
+                onDelete={deleteDoc} onFavourite={toggleFavourite}
               />
-            </>
-          )}
-        </div>
-      )}
+            ) : (
+              <>
+                <ChatWindow messages={messages} token={token!} />
+                <ChatInput
+                  onSend={(text) => {
+                    if (pendingClarification) sendMessage(pendingClarification.originalMessage, text);
+                    else sendMessage(text);
+                  }}
+                  onFile={handleFile}
+                  disabled={uploading}
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
