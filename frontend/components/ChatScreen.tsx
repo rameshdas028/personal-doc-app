@@ -122,24 +122,77 @@ function LeftPanel({ phone, workspaces, activeId, onSelect, onLogout, onWorkspac
 
       {/* Chat list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {items.map(item => {
+        {items.map((item, idx) => {
           const isActive = item.id === activeId;
           const msgs = messageStore[item.id] || [];
           const lastMsg = msgs.filter(m => !m.isScanning).slice(-1)[0];
+          const unread = msgs.filter(m => m.role === 'bot' && !m.isScanning).length;
+          const gradients = [
+            'linear-gradient(135deg,#fc4355,#d62d3e)',
+            'linear-gradient(135deg,#00a8f3,#0081bc)',
+            'linear-gradient(135deg,#f59e0b,#d97706)',
+            'linear-gradient(135deg,#10b981,#059669)',
+            'linear-gradient(135deg,#8b5cf6,#7c3aed)',
+          ];
+          const grad = item.id === 'personal' ? 'linear-gradient(135deg,#fc4355,#d62d3e)' : gradients[idx % gradients.length];
+          const lastText = lastMsg ? (lastMsg.text || '📎 File').replace(/\*\*/g, '').slice(0, 40) : item.sub;
+          const lastTime = lastMsg ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
           return (
             <div key={item.id} onClick={() => onSelect(item.id, item.ws)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: isActive ? 'var(--bg3)' : 'transparent', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 16px', cursor: 'pointer',
+                background: isActive ? 'var(--accent-soft)' : 'transparent',
+                borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+                transition: 'all 0.15s',
+              }}
               onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
               onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
             >
-              <Avatar name={item.name} size={48} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                  <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)' }}>{item.name}</span>
-                  {lastMsg && <span style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+              {/* Avatar with online dot */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <div style={{
+                  width: 50, height: 50, borderRadius: '50%',
+                  background: grad,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20, fontWeight: 700, color: '#fff',
+                  boxShadow: isActive ? `0 0 0 2px var(--accent)` : 'none',
+                  transition: 'box-shadow 0.15s',
+                }}>
+                  {item.id === 'personal' ? '🏠' : item.name.charAt(0).toUpperCase()}
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {lastMsg ? (lastMsg.role === 'user' ? '✓ ' : '') + (lastMsg.text || '📎 File') : item.sub}
+                {/* Online dot */}
+                <div style={{
+                  position: 'absolute', bottom: 2, right: 2,
+                  width: 11, height: 11, borderRadius: '50%',
+                  background: 'var(--success)',
+                  border: '2px solid var(--bg2)',
+                }} />
+              </div>
+
+              {/* Text */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <span style={{ fontSize: 14, fontWeight: isActive ? 700 : 600, color: isActive ? 'var(--accent)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
+                    {item.name}
+                  </span>
+                  <span style={{ fontSize: 11, color: isActive ? 'var(--accent)' : 'var(--text3)', flexShrink: 0 }}>{lastTime}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>
+                    {lastMsg?.role === 'user' && <span style={{ color: 'var(--accent)', marginRight: 3 }}>✓✓</span>}
+                    {lastText}
+                  </span>
+                  {unread > 0 && !isActive && (
+                    <span style={{
+                      background: 'var(--accent)', color: '#fff',
+                      borderRadius: '50%', minWidth: 18, height: 18,
+                      fontSize: 10, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 4px', flexShrink: 0,
+                    }}>{unread > 99 ? '99+' : unread}</span>
+                  )}
                 </div>
               </div>
             </div>
