@@ -184,19 +184,39 @@ router.get('/', authMiddleware, async (req, res) => {
 
 // Toggle favourite
 router.patch('/:id/favourite', authMiddleware, async (req, res) => {
-  const doc = await getDocumentById(req.params.id, req.userId);
+  const userId = req.userId;
+  // Check personal first, then user's workspaces
+  let doc = await getDocumentById(req.params.id, userId);
+  let storeId = userId;
+  if (!doc) {
+    const memberships = await WorkspaceMember.find({ user_id: userId, status: 'active' });
+    for (const m of memberships) {
+      doc = await getDocumentById(req.params.id, m.workspace_id);
+      if (doc) { storeId = m.workspace_id; break; }
+    }
+  }
   if (!doc) return res.status(404).json({ error: 'Not found' });
   const newVal = doc.is_favourite !== 'true';
-  await upsertDocument({ ...doc, id: doc.doc_id, user_id: req.userId, is_favourite: newVal, extracted_text: doc.extracted_text || '' });
+  await upsertDocument({ ...doc, id: doc.doc_id, user_id: userId, is_favourite: newVal, extracted_text: doc.extracted_text || '' }, storeId);
   res.json({ success: true, is_favourite: newVal });
 });
 
 // Delete a document
 router.delete('/:id', authMiddleware, async (req, res) => {
-  const doc = await getDocumentById(req.params.id, req.userId);
+  const userId = req.userId;
+  // Check personal first, then user's workspaces
+  let doc = await getDocumentById(req.params.id, userId);
+  let storeId = userId;
+  if (!doc) {
+    const memberships = await WorkspaceMember.find({ user_id: userId, status: 'active' });
+    for (const m of memberships) {
+      doc = await getDocumentById(req.params.id, m.workspace_id);
+      if (doc) { storeId = m.workspace_id; break; }
+    }
+  }
   if (!doc) return res.status(404).json({ error: 'Not found' });
   try { fs.unlinkSync(doc.filepath); } catch (e) {}
-  await removeDocument(doc.doc_id, req.userId);
+  await removeDocument(doc.doc_id, storeId);
   res.json({ success: true });
 });
 
