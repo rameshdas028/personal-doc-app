@@ -1,5 +1,5 @@
 const { ChatGroq } = require('@langchain/groq');
-const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
+const { ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings } = require('@langchain/google-genai');
 const OpenAI = require('openai');
 
 function getChatModel() {
@@ -17,7 +17,21 @@ function getOpenAI() {
 }
 
 async function getEmbeddingModel() {
-  const model = process.env.EMBED_MODEL || 'text-embedding-3-small';
+  const provider = process.env.EMBED_PROVIDER || 'gemini';
+  const model = process.env.EMBED_MODEL || 'text-embedding-004';
+
+  if (provider === 'gemini') {
+    const embedder = new GoogleGenerativeAIEmbeddings({
+      apiKey: process.env.GEMINI_API_KEY,
+      model,
+    });
+    return {
+      embedQuery: (text) => embedder.embedQuery(text),
+      embedDocuments: (texts) => embedder.embedDocuments(texts),
+    };
+  }
+
+  // OpenAI fallback
   return {
     embedQuery: async (text) => {
       const res = await getOpenAI().embeddings.create({ model, input: text });
