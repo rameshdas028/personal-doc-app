@@ -9,8 +9,8 @@ const client = new ChromaClient({
 
 // Each user gets their own collection — fast isolated search
 const collectionCache = {};
-async function getCollection(userId) {
-  const name = `user_${userId}`;
+async function getCollection(storeId) {
+  const name = `user_${storeId}`;
   if (!collectionCache[name]) {
     collectionCache[name] = await client.getOrCreateCollection({
       name,
@@ -25,7 +25,8 @@ async function getEmbedding(text) {
   return model.embedQuery(text);
 }
 
-async function upsertDocument(doc) {
+async function upsertDocument(doc, storeId) {
+  storeId = storeId || doc.user_id;
   const parts = [
     doc.doc_type.replace(/_/g, ' '),
     doc.label || '',
@@ -37,7 +38,7 @@ async function upsertDocument(doc) {
   const text = parts.join(' | ').trim();
 
   const embedding = await getEmbedding(text);
-  const col = await getCollection(doc.user_id);
+  const col = await getCollection(storeId);
 
   await col.upsert({
     ids: [`doc_${doc.id}`],
@@ -67,9 +68,9 @@ async function upsertDocument(doc) {
   console.log(`[ChromaDB] Indexed doc ${doc.id} (${doc.doc_type}) for user ${doc.user_id}`);
 }
 
-async function removeDocument(docId, userId) {
+async function removeDocument(docId, storeId) {
   try {
-    const col = await getCollection(userId);
+    const col = await getCollection(storeId);
     await col.delete({ ids: [`doc_${docId}`] });
     console.log(`[ChromaDB] Removed doc ${docId}`);
   } catch (e) {
@@ -77,21 +78,21 @@ async function removeDocument(docId, userId) {
   }
 }
 
-async function getDocumentById(docId, userId) {
-  const col = await getCollection(userId);
+async function getDocumentById(docId, storeId) {
+  const col = await getCollection(storeId);
   const result = await col.get({ ids: [`doc_${docId}`], include: ['metadatas'] });
   if (!result.ids.length) return null;
   return result.metadatas[0];
 }
 
-async function getDocumentsByUser(userId) {
-  const col = await getCollection(userId);
+async function getDocumentsByUser(storeId) {
+  const col = await getCollection(storeId);
   const result = await col.get({ include: ['metadatas'] });
   return result.metadatas || [];
 }
 
-async function getDocumentByHash(filehash, userId) {
-  const col = await getCollection(userId);
+async function getDocumentByHash(filehash, storeId) {
+  const col = await getCollection(storeId);
   const result = await col.get({ include: ['metadatas'] });
   if (!result.ids.length) return null;
   const idx = result.metadatas.findIndex(m => m.filehash === filehash);
@@ -99,16 +100,16 @@ async function getDocumentByHash(filehash, userId) {
   return { chroma_id: result.ids[idx], ...result.metadatas[idx] };
 }
 
-async function getDocumentsByType(docType, userId) {
-  const col = await getCollection(userId);
+async function getDocumentsByType(docType, storeId) {
+  const col = await getCollection(storeId);
   const result = await col.get({ include: ['metadatas'] });
   return result.ids
     .map((id, i) => ({ chroma_id: id, ...result.metadatas[i] }))
     .filter(d => d.doc_type === docType);
 }
 
-async function searchDocuments(query, userId, topK = 3) {
-  const col = await getCollection(userId);
+async function searchDocuments(query, storeId, topK = 3) {
+  const col = await getCollection(storeId);
   const queryEmbedding = await getEmbedding(query);
 
   const results = await col.query({

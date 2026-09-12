@@ -16,6 +16,26 @@ const UserSchema = new mongoose.Schema({
   created_at:  { type: Date, default: Date.now },
 });
 
-const User = mongoose.model('User', UserSchema);
+// Workspace — a shared group (e.g. "Family", "Office")
+const WorkspaceSchema = new mongoose.Schema({
+  name:       { type: String, required: true, trim: true },
+  owner_id:   { type: String, required: true },   // userId of creator
+  invite_code:{ type: String, unique: true },      // short code to join
+  created_at: { type: Date, default: Date.now },
+});
 
-module.exports = { User };
+// WorkspaceMember — who is in which workspace
+const WorkspaceMemberSchema = new mongoose.Schema({
+  workspace_id: { type: String, required: true },
+  user_id:      { type: String, required: true },
+  role:         { type: String, enum: ['owner', 'member'], default: 'member' },
+  status:       { type: String, enum: ['pending', 'active'], default: 'active' },
+  joined_at:    { type: Date, default: Date.now },
+});
+WorkspaceMemberSchema.index({ workspace_id: 1, user_id: 1 }, { unique: true });
+
+const User = mongoose.model('User', UserSchema);
+const Workspace = mongoose.model('Workspace', WorkspaceSchema);
+const WorkspaceMember = mongoose.model('WorkspaceMember', WorkspaceMemberSchema);
+
+module.exports = { User, Workspace, WorkspaceMember };

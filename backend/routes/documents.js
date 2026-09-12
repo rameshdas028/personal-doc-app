@@ -6,6 +6,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const { upsertDocument, removeDocument, getDocumentsByUser, getDocumentByHash, getDocumentsByType, getDocumentById } = require('../vectorStore');
+const { WorkspaceMember } = require('../db');
 const { analyzeFile } = require('../aiAnalyzer');
 
 const router = express.Router();
@@ -86,31 +87,41 @@ router.get('/expiring', authMiddleware, async (req, res) => {
 
 // Step 2: Confirm upload with purpose
 router.post('/upload', authMiddleware, async (req, res) => {
-  const { temp_path, temp_filename, mimetype, doc_type, label, purpose, extra_info, ai_description, extracted_text, category, group_name, period, expiry_date } = req.body;
+  const { temp_path, temp_filename, mimetype, doc_type, label, purpose, extra_info, ai_description, extracted_text, category, group_name, period, expiry_date, workspace_id } = req.body;
   const userId = req.userId;
+
+  // If workspace_id given, verify membership
+  if (workspace_id) {
+    const mem = await WorkspaceMember.findOne({ workspace_id, user_id: userId, status: 'active' });
+    if (!mem) return res.status(403).json({ error: 'Not a member of this workspace' });
+  }
 
   if (!temp_path || !fs.existsSync(temp_path)) return res.status(400).json({ error: 'File not found, please re-upload' });
   if (!doc_type) return res.status(400).json({ error: 'doc_type is required' });
 
   const hash = fileHash(temp_path);
 
+  // Scope: workspace docs use workspace collection, personal use userId
+  const storeId = workspace_id || userId;
+
   // Check exact duplicate by hash
-  const exactDuplicate = await getDocumentByHash(hash, userId);
+  const exactDuplicate = await getDocumentByHash(hash, storeId);
   if (exactDuplicate) {
     return res.json({ success: true, action: 'unchanged', document: exactDuplicate });
   }
 
   // Check same doc_type AND group_name — auto replace only if truly same document
-  const sameType = await getDocumentsByType(doc_type, userId);
+  const sameType = await getDocumentsByType(doc_type, storeId);
   const sameGroup = sameType.filter(d => (d.group_name || '') === (group_name || ''));
   if (sameGroup.length > 0) {
     const old = sameGroup[0];
     try { fs.unlinkSync(old.filepath); } catch (e) {}
-    await removeDocument(old.doc_id, userId);
+    await removeDocument(old.doc_id, storeId);
 
     const doc = {
       id: parseInt(old.doc_id),
       user_id: userId,
+      workspace_id: workspace_id || '',
       doc_type,
       category: category || old.category || 'other',
       group_name: group_name || old.group_name || '',
@@ -128,7 +139,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
       mimetype,
       created_at: old.created_at,
     };
-    await upsertDocument(doc);
+    await upsertDocument(doc, storeId);
     return res.json({ success: true, action: 'updated', document: doc });
   }
   // New document
@@ -136,6 +147,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
   const doc = {
     id,
     user_id: userId,
+    workspace_id: workspace_id || '',
     doc_type,
     category: category || 'other',
     group_name: group_name || '',
@@ -153,12 +165,19 @@ router.post('/upload', authMiddleware, async (req, res) => {
     mimetype,
     created_at: new Date().toISOString(),
   };
-  await upsertDocument(doc);
+  await upsertDocument(doc, storeId);
   res.json({ success: true, action: 'created', document: doc });
 });
 
-// List all documents
+// List all documents (personal or workspace)
 router.get('/', authMiddleware, async (req, res) => {
+  const { workspace_id } = req.query;
+  if (workspace_id) {
+    const mem = await WorkspaceMember.findOne({ workspace_id, user_id: req.userId, status: 'active' });
+    if (!mem) return res.status(403).json({ error: 'Not a member' });
+    const docs = await getDocumentsByUser(workspace_id);
+    return res.json({ documents: docs });
+  }
   const docs = await getDocumentsByUser(req.userId);
   res.json({ documents: docs });
 });
@@ -190,7 +209,15 @@ router.get('/file/:id', async (req, res) => {
   let userId;
   try { userId = jwt.verify(token, JWT_SECRET).userId; } catch { return res.status(401).json({ error: 'Invalid token' }); }
 
-  const doc = await getDocumentById(req.params.id, userId);
+  // Try personal first, then all workspaces user belongs to
+  let doc = await getDocumentById(req.params.id, userId);
+  if (!doc) {
+    const memberships = await WorkspaceMember.find({ user_id: userId, status: 'active' });
+    for (const m of memberships) {
+      doc = await getDocumentById(req.params.id, m.workspace_id);
+      if (doc) break;
+    }
+  }
   if (!doc) return res.status(404).json({ error: 'Not found' });
   if (!fs.existsSync(doc.filepath)) return res.status(404).json({ error: 'File not found on disk' });
   res.setHeader('Content-Type', doc.mimetype);

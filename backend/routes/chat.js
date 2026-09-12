@@ -42,8 +42,9 @@ Respond with ONLY the JSON, no extra text.`),
 }
 
 router.post('/', authMiddleware, async (req, res) => {
-  const { message, clarification, last_category, last_folder_docs, history } = req.body;
+  const { message, clarification, last_category, last_folder_docs, history, workspace_id } = req.body;
   const userId = req.userId;
+  const storeId = workspace_id || userId; // search workspace or personal vault
   if (!message) return res.status(400).json({ error: 'message is required' });
 
   try {
@@ -54,7 +55,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // ── WANTS LIST: user wants multiple docs as grid ──────────────────────
     if (intent.wants_list || (intent.categories?.length > 0 && !intent.wants_file)) {
-      const allDocs = await getDocumentsByUser(userId);
+      const allDocs = await getDocumentsByUser(storeId);
       let matchedDocs = allDocs;
 
       // Filter by categories if specified
@@ -131,7 +132,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // User asking which category a document belongs to
     if (intent.asking_category) {
-      const results = await searchDocuments(queryToSearch, userId, 1);
+      const results = await searchDocuments(queryToSearch, storeId, 1);
       const doc = results[0];
       if (!doc) return res.json({ reply: 'Koi matching document nahi mila vault mein.', matched: false });
       const CAT_LABELS = { identity: 'Identity 🪪', bills: 'Bills & Utilities 🧾', income: 'Income 💰', medical: 'Medical 🏥', vehicle: 'Vehicle 🚗', insurance: 'Insurance 🛡️', education: 'Education 🎓', legal: 'Legal ⚖️', other: 'Other 📁' };
@@ -147,7 +148,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // Folder/category listing query
     if (intent.folder_query) {
-      const allDocs = await getDocumentsByUser(userId);
+      const allDocs = await getDocumentsByUser(storeId);
       const folderDocs = allDocs.filter(d => (d.category || 'other').toLowerCase() === intent.folder_query.toLowerCase());
       if (!folderDocs.length) {
         return res.json({ reply: `"${intent.folder_query}" folder mein koi document nahi hai.`, matched: false });
@@ -176,7 +177,7 @@ router.post('/', authMiddleware, async (req, res) => {
     // Search ChromaDB — result is source of truth
     let matchedDoc = null;
     if (intent.wants_file) {
-      const results = await searchDocuments(intent.search_query, userId, 5);
+      const results = await searchDocuments(intent.search_query, storeId, 5);
 
       // 1. Person name match — strongest signal (with variants for spelling mistakes)
       if (intent.person_name && results.length) {
@@ -221,11 +222,11 @@ router.post('/', authMiddleware, async (req, res) => {
     let reply;
     if (!intent.wants_file) {
       // Check if there's a recently matched doc context in the query
-      const allDocs = await getDocumentsByUser(userId);
+      const allDocs = await getDocumentsByUser(storeId);
       const recentDoc = allDocs.length ? allDocs[allDocs.length - 1] : null;
 
-      // Search for relevant doc even for non-file questions (user may be asking about a doc)
-      const contextResults = await searchDocuments(queryToSearch, userId, 1);
+      // Search for relevant doc even for non-file questions
+      const contextResults = await searchDocuments(queryToSearch, storeId, 1);
       const contextDoc = contextResults[0]?.score > 0.15 ? contextResults[0] : null;
 
       const docContext = contextDoc
