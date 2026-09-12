@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { apiFetch } from '@/lib/api';
-import Sidebar from './Sidebar';
 import ChatWindow from './ChatWindow';
 import ChatInput from './ChatInput';
 import DocListPanel from './DocListPanel';
@@ -19,48 +18,49 @@ export interface Message {
 }
 
 export interface Doc {
-  doc_id: string;
-  doc_type: string;
-  category: string;
-  group_name: string;
-  period: string;
-  expiry_date: string;
-  extracted_text: string;
-  is_favourite: string;
-  label: string | null;
-  ai_description: string | null;
-  created_at: string;
-  mimetype: string;
-  file_url: string;
+  doc_id: string; doc_type: string; category: string; group_name: string;
+  period: string; expiry_date: string; extracted_text: string;
+  is_favourite: string; label: string | null; ai_description: string | null;
+  created_at: string; mimetype: string; file_url: string;
 }
 
 export interface Workspace {
-  id: string;
-  name: string;
-  owner_id: string;
-  role: 'owner' | 'member';
-  created_at: string;
+  id: string; name: string; owner_id: string;
+  role: 'owner' | 'member'; created_at: string;
 }
 
-// key = workspace id or 'personal'
 type MessageStore = Record<string, Message[]>;
 
-// ── Home landing page — shown when back is clicked ─────────────────────────────────
-function HomeView({ workspaces, onSelect, onLogout, onWorkspaceCreated }: {
-  workspaces: Workspace[];
-  onSelect: (ws: Workspace | null) => void;
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function getToken() {
+  try { return JSON.parse(localStorage.getItem('auth') || '{}').state?.token || ''; } catch { return ''; }
+}
+
+function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+  const colors = ['#00a884','#0063cb','#7c3aed','#db2777','#ea580c','#16a34a'];
+  const color = colors[name.charCodeAt(0) % colors.length];
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.4, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Left Panel ────────────────────────────────────────────────────────────────
+function LeftPanel({ phone, workspaces, activeId, onSelect, onLogout, onWorkspaceCreated, messageStore }: {
+  phone: string; workspaces: Workspace[];
+  activeId: string | null;
+  onSelect: (id: string | null, ws: Workspace | null) => void;
   onLogout: () => void;
   onWorkspaceCreated: (ws: Workspace) => void;
+  messageStore: MessageStore;
 }) {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
-
-  function getToken() {
-    try { return JSON.parse(localStorage.getItem('auth') || '{}').state?.token || ''; } catch { return ''; }
-  }
+  const { theme, toggle } = useTheme();
 
   async function createWs() {
     if (!newName.trim()) return;
@@ -92,111 +92,146 @@ function HomeView({ workspaces, onSelect, onLogout, onWorkspaceCreated }: {
     } catch (e: any) { setError(e.message); }
   }
 
-  const allItems = [
-    { ws: null as Workspace | null, name: 'My Drive', sub: 'Your personal documents', icon: '🏠', color: 'var(--gradient)' },
-    ...workspaces.map(ws => ({ ws, name: ws.name, sub: `${ws.role} · shared workspace`, icon: '👥', color: 'var(--accent)' })),
+  const items = [
+    { id: 'personal', name: 'My Drive', sub: 'Personal documents', ws: null },
+    ...workspaces.map(ws => ({ id: ws.id, name: ws.name, sub: ws.role, ws })),
   ];
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
-      {/* Top bar */}
-      <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📁</div>
-        <div style={{ flex: 1, fontSize: 16, fontWeight: 700 }}>ilovemydoc</div>
-        <button onClick={onLogout}
-          style={{ padding: '7px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--error)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--error)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
-        >Logout</button>
+    <div style={{ width: 360, flexShrink: 0, height: '100vh', background: 'var(--bg2)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Header */}
+      <div style={{ padding: '10px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <Avatar name={phone || 'U'} size={40} />
+        <div style={{ flex: 1, fontSize: 16, fontWeight: 600 }}>ilovemydoc</div>
+        <button onClick={toggle} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 18, padding: 6, borderRadius: '50%' }}
+          title="Toggle theme"
+        >{theme === 'dark' ? '☀️' : '🌙'}</button>
+        <button onClick={onLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', padding: 6, borderRadius: '50%' }} title="Logout">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 28px' }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Good day! 👋</div>
-        <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 28 }}>Select a drive to start chatting</div>
-
-        {/* Drive cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14, marginBottom: 32 }}>
-          {allItems.map(item => (
-            <div key={item.ws?.id ?? 'personal'} onClick={() => onSelect(item.ws)}
-              style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 18px', cursor: 'pointer', transition: 'all 0.18s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(124,111,239,0.15)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
-            >
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 14 }}>{item.icon}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{item.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{item.sub}</div>
-            </div>
-          ))}
+      {/* Search bar style */}
+      <div style={{ padding: '8px 12px', background: 'var(--bg2)', flexShrink: 0 }}>
+        <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span style={{ fontSize: 13, color: 'var(--text3)' }}>Search or start new chat</span>
         </div>
+      </div>
 
-        {/* New / Join workspace */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {!showNew && !showJoin && (
-            <>
+      {/* Chat list */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {items.map(item => {
+          const isActive = item.id === activeId;
+          const msgs = messageStore[item.id] || [];
+          const lastMsg = msgs.filter(m => !m.isScanning).slice(-1)[0];
+          return (
+            <div key={item.id} onClick={() => onSelect(item.id, item.ws)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: isActive ? 'var(--bg3)' : 'transparent', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+              onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
+              onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            >
+              <Avatar name={item.name} size={48} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                  <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)' }}>{item.name}</span>
+                  {lastMsg && <span style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lastMsg ? (lastMsg.role === 'user' ? '✓ ' : '') + (lastMsg.text || '📎 File') : item.sub}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* New / Join */}
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          {!showNew && !showJoin ? (
+            <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setShowNew(true)}
-                style={{ padding: '10px 18px', borderRadius: 10, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; }}
-              >＋ New workspace</button>
+                style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+              >＋ New group</button>
               <button onClick={() => setShowJoin(true)}
-                style={{ padding: '10px 18px', borderRadius: 10, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; }}
-              >🔑 Join workspace</button>
-            </>
-          )}
-          {showNew && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Workspace name" autoFocus
-                style={{ background: 'var(--bg2)', border: '1px solid var(--accent)', borderRadius: 9, padding: '9px 14px', fontSize: 13, color: 'var(--text)', outline: 'none', width: 200 }}
+                style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text3)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+              >🔑 Join group</button>
+            </div>
+          ) : showNew ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Group name" autoFocus
+                style={{ background: 'var(--bg3)', border: '1px solid var(--accent)', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: 'var(--text)', outline: 'none' }}
                 onKeyDown={e => e.key === 'Enter' && createWs()}
               />
-              <button onClick={createWs} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Create</button>
-              <button onClick={() => { setShowNew(false); setError(''); }} style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={createWs} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Create</button>
+                <button onClick={() => { setShowNew(false); setError(''); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              </div>
             </div>
-          )}
-          {showJoin && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="Enter invite code" autoFocus
-                style={{ background: 'var(--bg2)', border: '1px solid var(--accent)', borderRadius: 9, padding: '9px 14px', fontSize: 13, color: 'var(--text)', outline: 'none', width: 200 }}
+                style={{ background: 'var(--bg3)', border: '1px solid var(--accent)', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: 'var(--text)', outline: 'none' }}
                 onKeyDown={e => e.key === 'Enter' && joinWs()}
               />
-              <button onClick={joinWs} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Join</button>
-              <button onClick={() => { setShowJoin(false); setError(''); }} style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={joinWs} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Join</button>
+                <button onClick={() => { setShowJoin(false); setError(''); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              </div>
             </div>
           )}
+          {error && <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 6 }}>{error}</div>}
         </div>
-        {error && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{error}</div>}
       </div>
     </div>
   );
 }
 
+// ── Empty right panel ─────────────────────────────────────────────────────────
+function EmptyPanel() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
+      <div style={{ fontSize: 80 }}>📁</div>
+      <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)' }}>ilovemydoc</div>
+      <div style={{ fontSize: 14, color: 'var(--text3)', textAlign: 'center', maxWidth: 320, lineHeight: 1.6 }}>
+        Select a drive or group from the left to start chatting with your documents
+      </div>
+      <div style={{ marginTop: 8, padding: '6px 16px', borderRadius: 20, border: '1px solid var(--border)', fontSize: 12, color: 'var(--text3)' }}>
+        🔒 End-to-end encrypted
+      </div>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function ChatScreen() {
   const { token, phone, logout } = useAuthStore();
-  const { theme, toggle } = useTheme();
+  const { theme } = useTheme();
 
-  // Per-workspace message history
   const [messageStore, setMessageStore] = useState<MessageStore>({ personal: [] });
   const [docs, setDocs] = useState<Doc[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeId, setActiveId] = useState<string | null>('personal');
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
-  const [view, setView] = useState<'home' | 'chat' | 'drive'>('home');
+  const [showDrive, setShowDrive] = useState(false);
   const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string; question: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const lastCategoryRef = useRef<string | null>(null);
   const lastFolderDocsRef = useRef<{ doc_id: string; label: string }[]>([]);
 
-  const storeKey = activeWorkspace?.id ?? 'personal';
-  const messages = messageStore[storeKey] || [];
+  const messages = messageStore[activeId ?? ''] || [];
 
   function addMessage(msg: Message) {
-    setMessageStore(prev => ({ ...prev, [storeKey]: [...(prev[storeKey] || []), msg] }));
+    if (!activeId) return;
+    setMessageStore(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), msg] }));
   }
 
   useEffect(() => { loadWorkspaces(); loadExpiryAlerts(); }, []);
-  useEffect(() => { loadDocs(); lastCategoryRef.current = null; lastFolderDocsRef.current = []; setPendingClarification(null); }, [activeWorkspace]);
+  useEffect(() => { if (activeId) loadDocs(); lastCategoryRef.current = null; lastFolderDocsRef.current = []; setPendingClarification(null); }, [activeId]);
 
   async function loadWorkspaces() {
     try {
@@ -211,7 +246,7 @@ export default function ChatScreen() {
       if (data.expiring?.length) {
         const lines = data.expiring.map((d: any) => {
           const name = d.label || d.group_name || d.doc_type.replace(/_/g, ' ');
-          return `⚠️ **${name}** — ${d.days_left === 0 ? 'expires today!' : `expires in ${d.days_left} day${d.days_left === 1 ? '' : 's'}`} (${d.expiry_date})`;
+          return `⚠️ **${name}** — expires in ${d.days_left} day${d.days_left === 1 ? '' : 's'} (${d.expiry_date})`;
         });
         setMessageStore(prev => ({ ...prev, personal: [...(prev.personal || []), { role: 'bot', text: `🔔 **Expiry Alerts:**\n${lines.join('\n')}` }] }));
       }
@@ -226,8 +261,14 @@ export default function ChatScreen() {
     } catch {}
   }
 
+  function selectChat(id: string | null, ws: Workspace | null) {
+    setActiveId(id);
+    setActiveWorkspace(ws);
+    setShowDrive(false);
+  }
+
   async function sendMessage(text: string, clarification?: string) {
-    if (!text.trim()) return;
+    if (!text.trim() || !activeId) return;
     addMessage({ role: 'user', text: clarification ? clarification : text });
     try {
       const body: any = clarification ? { message: text, clarification } : { message: text };
@@ -243,7 +284,6 @@ export default function ChatScreen() {
         setPendingClarification({ originalMessage: text, question: data.question });
         return;
       }
-
       setPendingClarification(null);
       if (data.last_category) lastCategoryRef.current = data.last_category;
       else if (data.matched) lastCategoryRef.current = data.document?.category || null;
@@ -252,143 +292,107 @@ export default function ChatScreen() {
       else if (data.matched) lastFolderDocsRef.current = [];
 
       addMessage({
-        role: 'bot',
-        text: data.reply,
+        role: 'bot', text: data.reply,
         fileUrl: data.file_url ? `${process.env.NEXT_PUBLIC_API_URL}${data.file_url}?token=${token}` : undefined,
         mimetype: data.document?.mimetype,
         folderDocs: data.folder_docs?.length ? data.folder_docs : undefined,
       });
-    } catch (e: any) {
-      addMessage({ role: 'bot', text: '❌ ' + e.message });
-    }
+    } catch (e: any) { addMessage({ role: 'bot', text: '❌ ' + e.message }); }
   }
 
   async function handleFile(file: File) {
+    if (!activeId) return;
     setUploading(true);
     addMessage({ role: 'user', text: file.name, previewUrl: URL.createObjectURL(file), mimetype: file.type });
     addMessage({ role: 'bot', text: '', isScanning: true });
     try {
-      const fd = new FormData();
-      fd.append('file', file);
+      const fd = new FormData(); fd.append('file', file);
       const data = await apiFetch('/api/documents/analyze', { method: 'POST', body: fd }, token);
-      setMessageStore(prev => ({ ...prev, [storeKey]: (prev[storeKey] || []).filter(m => !m.isScanning) }));
+      setMessageStore(prev => ({ ...prev, [activeId]: (prev[activeId] || []).filter(m => !m.isScanning) }));
       doUpload(data);
     } catch (e: any) {
-      setMessageStore(prev => ({ ...prev, [storeKey]: (prev[storeKey] || []).filter(m => !m.isScanning) }));
+      setMessageStore(prev => ({ ...prev, [activeId]: (prev[activeId] || []).filter(m => !m.isScanning) }));
       addMessage({ role: 'bot', text: '❌ ' + e.message });
     }
     setUploading(false);
   }
 
-  async function doUpload(aiAnalysis: any, purpose?: string, docType?: string, forceUpdate = false, label?: string, description?: string) {
+  async function doUpload(ai: any) {
     try {
-      const finalDocType = docType || aiAnalysis.doc_type;
       const body = {
-        temp_path: aiAnalysis.temp_path, temp_filename: aiAnalysis.temp_filename,
-        mimetype: aiAnalysis.mimetype, doc_type: finalDocType,
-        category: aiAnalysis.category || 'other', group_name: aiAnalysis.group_name || '',
-        period: aiAnalysis.period || '', expiry_date: aiAnalysis.expiry_date || '',
-        label: label || aiAnalysis.description || '',
-        ai_description: description || aiAnalysis.description || '',
-        extracted_text: aiAnalysis.extracted_text || '',
-        purpose: purpose || '', force_update: forceUpdate ? 'true' : 'false',
+        temp_path: ai.temp_path, temp_filename: ai.temp_filename, mimetype: ai.mimetype,
+        doc_type: ai.doc_type, category: ai.category || 'other', group_name: ai.group_name || '',
+        period: ai.period || '', expiry_date: ai.expiry_date || '',
+        label: ai.description || '', ai_description: ai.description || '',
+        extracted_text: ai.extracted_text || '', purpose: '', force_update: 'false',
         ...(activeWorkspace ? { workspace_id: activeWorkspace.id } : {}),
       };
       const data = await apiFetch('/api/documents/upload', { method: 'POST', body: JSON.stringify(body) }, token);
-      const msg = data.action === 'updated' ? `✅ ${finalDocType} updated!` : data.action === 'unchanged' ? `ℹ️ Already up to date.` : `✅ ${finalDocType} saved!`;
-      addMessage({ role: 'bot', text: msg });
+      addMessage({ role: 'bot', text: data.action === 'updated' ? `✅ Updated!` : data.action === 'unchanged' ? `ℹ️ Already up to date.` : `✅ ${ai.doc_type} saved!` });
       loadDocs();
-    } catch (e: any) {
-      addMessage({ role: 'bot', text: '❌ ' + e.message });
-    }
+    } catch (e: any) { addMessage({ role: 'bot', text: '❌ ' + e.message }); }
   }
 
-  async function toggleFavourite(docId: string) {
-    try { await apiFetch(`/api/documents/${docId}/favourite`, { method: 'PATCH' }, token); loadDocs(); } catch {}
-  }
+  async function toggleFavourite(id: string) { try { await apiFetch(`/api/documents/${id}/favourite`, { method: 'PATCH' }, token); loadDocs(); } catch {} }
+  async function deleteDoc(id: string) { try { await apiFetch(`/api/documents/${id}`, { method: 'DELETE' }, token); loadDocs(); } catch {} }
 
-  async function deleteDoc(id: string) {
-    try { await apiFetch(`/api/documents/${id}`, { method: 'DELETE' }, token); loadDocs(); } catch {}
-  }
-
-  const wsName = activeWorkspace?.name ?? 'My Drive';
-  const wsIcon = activeWorkspace ? '👥' : '🏠';
+  const activeName = activeWorkspace?.name ?? (activeId === 'personal' ? 'My Drive' : '');
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
 
-      {/* HOME VIEW — full screen workspace list, no sidebar */}
-      {view === 'home' && (
-        <HomeView
-          workspaces={workspaces}
-          onSelect={(ws) => { setActiveWorkspace(ws); setView('chat'); }}
-          onLogout={logout}
-          onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); setView('chat'); }}
-        />
-      )}
+      {/* LEFT — WhatsApp sidebar */}
+      <LeftPanel
+        phone={phone!}
+        workspaces={workspaces}
+        activeId={activeId}
+        onSelect={selectChat}
+        onLogout={logout}
+        onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); selectChat(ws.id, ws); }}
+        messageStore={messageStore}
+      />
 
-      {/* CHAT / DRIVE VIEW — sidebar + right panel */}
-      {view !== 'home' && (
-        <>
-          <Sidebar
-            phone={phone!}
-            workspaces={workspaces}
-            activeWorkspace={activeWorkspace}
-            onSelect={(ws) => { setActiveWorkspace(ws); setView('chat'); }}
-            onLogout={logout}
-            onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); setView('chat'); }}
-          />
+      {/* RIGHT — chat or empty */}
+      {!activeId ? <EmptyPanel /> : (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}>
-            {/* Header */}
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              <button onClick={() => setView('home')}
-                style={{ width: 36, height: 36, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text2)', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--text)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text2)'; }}
-              >←</button>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: activeWorkspace ? 'var(--accent)' : 'var(--gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{wsIcon}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{wsName}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{activeWorkspace ? `${activeWorkspace.role} · ${docs.length} docs` : `${docs.length} documents`}</div>
-              </div>
-              <button onClick={() => setView(view === 'drive' ? 'chat' : 'drive')}
-                style={{ width: 36, height: 36, background: view === 'drive' ? 'var(--accent-soft)' : 'var(--bg3)', border: `1px solid ${view === 'drive' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}
-              >🗂️</button>
-              <button onClick={toggle}
-                style={{ width: 36, height: 36, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-              >{theme === 'dark' ? '☀️' : '🌙'}</button>
+          {/* Chat header */}
+          <div style={{ padding: '10px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+            <Avatar name={activeName} size={40} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{activeName}</div>
+              <div style={{ fontSize: 12, color: 'var(--accent)' }}>{docs.length} documents</div>
             </div>
-
-            {view === 'drive' ? (
-              <DocListPanel
-                docs={docs} token={token!}
-                workspaces={workspaces}
-                activeWorkspace={activeWorkspace}
-                onSwitchWorkspace={(ws) => { setActiveWorkspace(ws); }}
-                onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); }}
-                onBack={() => setView('chat')}
-                onQuery={(q) => { setView('chat'); sendMessage(q); }}
-                onDelete={deleteDoc}
-                onFavourite={toggleFavourite}
-              />
-            ) : (
-              <>
-                <ChatWindow messages={messages} token={token!} />
-                <ChatInput
-                  onSend={(text) => {
-                    if (pendingClarification) sendMessage(pendingClarification.originalMessage, text);
-                    else sendMessage(text);
-                  }}
-                  onFile={handleFile}
-                  disabled={uploading}
-                />
-              </>
-            )}
+            <button onClick={() => setShowDrive(v => !v)}
+              style={{ background: showDrive ? 'var(--accent)' : 'none', border: 'none', cursor: 'pointer', color: showDrive ? '#fff' : 'var(--text2)', padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 500 }}
+            >🗂️ Files</button>
           </div>
-        </>
+
+          {/* Body */}
+          {showDrive ? (
+            <DocListPanel
+              docs={docs} token={token!}
+              workspaces={workspaces} activeWorkspace={activeWorkspace}
+              onSwitchWorkspace={(ws) => { setActiveWorkspace(ws); }}
+              onWorkspaceCreated={(ws) => { setWorkspaces(prev => [...prev, ws]); setActiveWorkspace(ws); }}
+              onBack={() => setShowDrive(false)}
+              onQuery={(q) => { setShowDrive(false); sendMessage(q); }}
+              onDelete={deleteDoc} onFavourite={toggleFavourite}
+            />
+          ) : (
+            <>
+              <ChatWindow messages={messages} token={token!} />
+              <ChatInput
+                onSend={(text) => {
+                  if (pendingClarification) sendMessage(pendingClarification.originalMessage, text);
+                  else sendMessage(text);
+                }}
+                onFile={handleFile}
+                disabled={uploading}
+              />
+            </>
+          )}
+        </div>
       )}
     </div>
   );
