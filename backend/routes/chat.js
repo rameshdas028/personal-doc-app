@@ -221,35 +221,59 @@ router.post('/', authMiddleware, async (req, res) => {
 
     let reply;
     if (!intent.wants_file) {
-      // Check if there's a recently matched doc context in the query
-      const allDocs = await getDocumentsByUser(storeId);
-      const recentDoc = allDocs.length ? allDocs[allDocs.length - 1] : null;
+      // Search top 3 relevant docs for context
+      const contextResults = await searchDocuments(queryToSearch, storeId, 3);
+      const relevantDocs = contextResults.filter(d => d.score > 0.10);
 
-      // Search for relevant doc even for non-file questions
-      const contextResults = await searchDocuments(queryToSearch, storeId, 1);
-      const contextDoc = contextResults[0]?.score > 0.15 ? contextResults[0] : null;
-
-      const docContext = contextDoc
-        ? `\n\nDocument context from user's vault:\nType: ${contextDoc.doc_type}\nDescription: ${contextDoc.ai_description}\nFull extracted text: ${contextDoc.extracted_text}`
-        : '';
+      const docContext = relevantDocs.length
+        ? relevantDocs.map((d, i) => (
+            `--- Document ${i + 1}: ${d.label || d.doc_type} ---\n` +
+            `Type: ${d.doc_type}\n` +
+            `Description: ${d.ai_description || ''}\n` +
+            `Extracted Text: ${d.extracted_text || ''}\n` +
+            `Period: ${d.period || ''}\n` +
+            `Expiry: ${d.expiry_date || ''}`
+          )).join('\n\n')
+        : 'No relevant documents found in vault.';
 
       const historyMessages = (history || []).map(m =>
         m.role === 'user' ? new HumanMessage(m.text) : new SystemMessage(m.text)
       );
+
       const result = await model.invoke([
-        new SystemMessage(`You are a helpful personal document assistant. Reply in same language as user.
+        new SystemMessage(`You are a smart personal document assistant. The user is asking about their documents.
+
+DOCUMENT VAULT CONTEXT:
+${docContext}
+
 Rules:
-- Answer ONLY from the document context provided below — do not guess or make up data
-- Use **bold** for important values (amounts, dates, names, numbers)
-- Use bullet points ONLY if there are actual multiple items to list — never use empty bullets
-- Keep response short and clear — max 5 lines
-- If answer is not in the document context, say so honestly${docContext}`),
+- Answer ONLY using the document context above — never guess or make up data
+- Reply in the SAME language as the user (Hindi/English/Hinglish)
+- Use **bold** for important values like amounts, dates, names, ID numbers
+- Be conversational and helpful — like a personal assistant
+- If multiple documents are relevant, mention all of them
+- If the answer is not in the documents, clearly say "Yeh information aapke documents mein nahi mili"
+- Keep response concise — max 6 lines`),
         ...historyMessages,
         new HumanMessage(queryToSearch)
       ]);
       reply = result.content;
     } else if (matchedDoc) {
-      reply = `Yeh raha: ${matchedDoc.ai_description || matchedDoc.doc_type}`;
+      // Generate a proper answer using the matched document's content
+      const result = await model.invoke([
+        new SystemMessage(`You are a personal document assistant. Reply in same language as user.
+Document found:
+Type: ${matchedDoc.doc_type}
+Label: ${matchedDoc.label || ''}
+Description: ${matchedDoc.ai_description || ''}
+Extracted Text: ${matchedDoc.extracted_text || ''}
+Period: ${matchedDoc.period || ''}
+Expiry: ${matchedDoc.expiry_date || ''}
+
+Give a 1-2 line summary of this document and confirm it's being shown. Use **bold** for key values.`),
+        new HumanMessage(queryToSearch)
+      ]);
+      reply = result.content;
     } else if (!clarification) {
       return res.json({
         reply: null,
