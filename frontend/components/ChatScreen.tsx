@@ -359,7 +359,7 @@ export default function ChatScreen() {
       {/* RIGHT — chat */}
       <div className={`right-panel${showChat ? ' active' : ''}`}>
         {!activeId ? <EmptyPanel /> : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)', overflow: 'hidden' }}>
 
             {/* Chat header */}
             <div style={{ padding: '10px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>

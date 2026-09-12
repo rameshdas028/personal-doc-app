@@ -48,12 +48,58 @@ function renderMarkdown(text: string) {
 export default function ChatWindow({ messages, token }: { messages: Message[]; token: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<{ url: string; mimetype?: string } | null>(null);
+  const [speaking, setSpeaking] = useState<number | null>(null); // index of speaking message
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
+  // Stop speech on unmount
+  useEffect(() => () => { window.speechSynthesis?.cancel(); }, []);
+
+  function speak(text: string, index: number) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    if (speaking === index) { setSpeaking(null); return; }
+
+    const clean = text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/[•\-#]/g, '').trim();
+    const utter = new SpeechSynthesisUtterance(clean);
+    utter.rate = 0.92;
+    utter.pitch = 1;
+    utter.volume = 1;
+
+    // Pick best available voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.lang.startsWith('hi')) ||
+                      voices.find(v => v.lang.startsWith('en-IN')) ||
+                      voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utter.voice = preferred;
+
+    utter.onstart = () => setSpeaking(index);
+    utter.onend = () => setSpeaking(null);
+    utter.onerror = () => setSpeaking(null);
+
+    // Voices may not be ready — wait if needed
+    if (voices.length === 0) {
+      window.speechSynthesis.addEventListener('voiceschanged', () => {
+        const v2 = window.speechSynthesis.getVoices();
+        const best = v2.find(v => v.lang.startsWith('hi')) ||
+                     v2.find(v => v.lang.startsWith('en-IN')) ||
+                     v2.find(v => v.lang.startsWith('en'));
+        if (best) utter.voice = best;
+        setSpeaking(index);
+        window.speechSynthesis.speak(utter);
+      }, { once: true });
+    } else {
+      setSpeaking(index);
+      window.speechSynthesis.speak(utter);
+    }
+  }
+
   // WhatsApp chat background pattern
   const bgStyle = {
-    flex: 1, overflowY: 'auto' as const,
+    flex: 1,
+    overflowY: 'auto' as const,
+    overflowX: 'hidden' as const,
+    minHeight: 0,
     background: 'var(--bg)',
     backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
     padding: '12px 8%',
@@ -113,7 +159,7 @@ export default function ChatWindow({ messages, token }: { messages: Message[]; t
 
                     {/* Text */}
                     {msg.text && (
-                      <div style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', marginBottom: msg.folderDocs ? 8 : 0 }}>
+                      <div style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word', marginBottom: msg.folderDocs ? 8 : 0 }}>
                         {renderMarkdown(msg.text)}
                       </div>
                     )}
@@ -141,8 +187,24 @@ export default function ChatWindow({ messages, token }: { messages: Message[]; t
                       </div>
                     )}
 
-                    {/* Timestamp + tick */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 3, marginTop: 3 }}>
+                    {/* Timestamp + speaker */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      {!isUser && msg.text && (
+                        <button onClick={() => speak(msg.text!, i)}
+                          title={speaking === i ? 'Stop' : 'Read aloud'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: speaking === i ? 'var(--accent)' : 'var(--text3)', display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                          onMouseLeave={e => { if (speaking !== i) e.currentTarget.style.color = 'var(--text3)'; }}
+                        >
+                          {speaking === i ? (
+                            // Stop icon
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                          ) : (
+                            // Speaker icon
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                          )}
+                        </button>
+                      )}
                       <span style={{ fontSize: 10, color: 'var(--text3)' }}>{time}</span>
                       {isUser && <span style={{ fontSize: 12, color: 'var(--accent)' }}>✓✓</span>}
                     </div>

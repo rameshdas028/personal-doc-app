@@ -16,7 +16,7 @@ export default function ChatInput({ onSend, onFile, disabled }: {
   }
 
   return (
-    <div style={{ padding: '8px 16px 12px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+    <div style={{ padding: '8px 16px 12px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderTop: '1px solid var(--border)' }}>
 
       {/* Attach */}
       <label style={{ width: 42, height: 42, borderRadius: '50%', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'not-allowed' : 'pointer', color: 'var(--text2)', flexShrink: 0 }}
