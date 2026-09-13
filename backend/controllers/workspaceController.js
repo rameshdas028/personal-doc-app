@@ -37,14 +37,14 @@ const getInviteCode = async (req, res) => {
   const ws = await Workspace.findById(req.params.id);
   if (!ws) return res.status(404).json({ error: 'Not found' });
   if (ws.ownerId !== req.userId) return res.status(403).json({ error: 'Only owner can view invite code' });
-  res.json({ invite_code: ws.inviteCode });
+  res.json({ inviteCode: ws.inviteCode });
 };
 
 const joinWorkspace = async (req, res) => {
-  const { invite_code } = req.body;
-  if (!invite_code) return res.status(400).json({ error: 'invite_code required' });
+  const { inviteCode } = req.body;
+  if (!inviteCode) return res.status(400).json({ error: 'inviteCode required' });
 
-  const ws = await Workspace.findOne({ inviteCode: invite_code.trim().toUpperCase() });
+  const ws = await Workspace.findOne({ inviteCode: inviteCode.trim().toUpperCase() });
   if (!ws) return res.status(404).json({ error: 'Invalid invite code' });
 
   const wsId = ws._id.toString();
@@ -74,6 +74,15 @@ const getMembers = async (req, res) => {
   res.json({ members: result });
 };
 
+const removeMember = async (req, res) => {
+  const ws = await Workspace.findById(req.params.id);
+  if (!ws) return res.status(404).json({ error: 'Not found' });
+  if (ws.ownerId !== req.userId) return res.status(403).json({ error: 'Only owner can remove members' });
+  if (req.params.userId === req.userId) return res.status(400).json({ error: 'Cannot remove yourself' });
+  await WorkspaceMember.deleteOne({ workspaceId: req.params.id, userId: req.params.userId });
+  res.json({ success: true });
+};
+
 const leaveWorkspace = async (req, res) => {
   const ws = await Workspace.findById(req.params.id);
   if (!ws) return res.status(404).json({ error: 'Not found' });
@@ -91,4 +100,4 @@ const deleteWorkspace = async (req, res) => {
   res.json({ success: true });
 };
 
-module.exports = { createWorkspace, getMyWorkspaces, getInviteCode, joinWorkspace, getMembers, leaveWorkspace, deleteWorkspace };
+module.exports = { createWorkspace, getMyWorkspaces, getInviteCode, joinWorkspace, getMembers, removeMember, leaveWorkspace, deleteWorkspace };

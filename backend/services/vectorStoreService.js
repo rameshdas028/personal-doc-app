@@ -23,8 +23,8 @@ async function getEmbedding(text) {
 }
 
 async function upsertDocument(doc, storeId) {
-  storeId = storeId || doc.user_id;
-  const text = [doc.doc_type.replace(/_/g, ' '), doc.label, doc.purpose, doc.ai_description, doc.extracted_text, doc.extra_info]
+  storeId = storeId || doc.userId;
+  const text = [doc.docType, doc.label, doc.purpose, doc.aiDescription, doc.extractedText, doc.extraInfo]
     .filter(Boolean).join(' | ').trim();
 
   const embedding = await getEmbedding(text);
@@ -35,27 +35,28 @@ async function upsertDocument(doc, storeId) {
     embeddings: [embedding],
     documents: [text],
     metadatas: [{
-      doc_id: String(doc.id),
-      user_id: String(doc.user_id),
-      doc_type: doc.doc_type,
-      category: doc.category || 'other',
-      group_name: doc.group_name || '',
-      period: doc.period || '',
-      expiry_date: doc.expiry_date || '',
-      is_favourite: doc.is_favourite ? 'true' : 'false',
-      label: doc.label || '',
-      purpose: doc.purpose || '',
-      ai_description: doc.ai_description || '',
-      extracted_text: (doc.extracted_text || '').slice(0, 2000),
-      filename: doc.filename || '',
-      filepath: doc.filepath || '',
-      filehash: doc.filehash || '',
-      mimetype: doc.mimetype || '',
-      file_url: `/api/documents/file/${doc.id}`,
-      created_at: doc.created_at || new Date().toISOString(),
+      docId:         String(doc.id),
+      userId:        String(doc.userId),
+      docType:       doc.docType || '',
+      category:      doc.category || 'other',
+      groupName:     doc.groupName || '',
+      period:        doc.period || '',
+      expiryDate:    doc.expiryDate || '',
+      isFavourite:   doc.isFavourite ? 'true' : 'false',
+      label:         doc.label || '',
+      purpose:       doc.purpose || '',
+      aiDescription: doc.aiDescription || '',
+      extractedText: (doc.extractedText || '').slice(0, 2000),
+      filename:      doc.filename || '',
+      filepath:      doc.filepath || '',
+      filehash:      doc.filehash || '',
+      mimetype:      doc.mimetype || '',
+      fileUrl:       `/api/documents/file/${doc.id}`,
+      createdAt:     doc.createdAt || new Date().toISOString(),
+      workspaceId:   doc.workspaceId || '',
     }],
   });
-  console.log(`[VectorStore] Indexed doc ${doc.id} (${doc.doc_type})`);
+  console.log(`[VectorStore] Indexed doc ${doc.id} (${doc.docType})`);
 }
 
 async function removeDocument(docId, storeId) {
@@ -84,13 +85,13 @@ async function getDocumentByHash(filehash, storeId) {
   const result = await col.get({ include: ['metadatas'] });
   if (!result.ids.length) return null;
   const idx = result.metadatas.findIndex(m => m.filehash === filehash);
-  return idx === -1 ? null : { chroma_id: result.ids[idx], ...result.metadatas[idx] };
+  return idx === -1 ? null : { chromaId: result.ids[idx], ...result.metadatas[idx] };
 }
 
 async function getDocumentsByType(docType, storeId) {
   const col = await getCollection(storeId);
   const result = await col.get({ include: ['metadatas'] });
-  return result.ids.map((id, i) => ({ chroma_id: id, ...result.metadatas[i] })).filter(d => d.doc_type === docType);
+  return result.ids.map((id, i) => ({ chromaId: id, ...result.metadatas[i] })).filter(d => d.docType === docType);
 }
 
 async function searchDocuments(query, storeId, topK = 3) {
@@ -99,9 +100,9 @@ async function searchDocuments(query, storeId, topK = 3) {
   const results = await col.query({ queryEmbeddings: [queryEmbedding], nResults: topK, include: ['metadatas', 'documents', 'distances'] });
   if (!results.ids[0]?.length) return [];
   return results.ids[0].map((id, i) => ({
-    chroma_id: id,
+    chromaId: id,
     ...results.metadatas[0][i],
-    doc_id: parseInt(results.metadatas[0][i].doc_id),
+    docId: parseInt(results.metadatas[0][i].docId),
     score: 1 - (results.distances[0][i] / 2),
   }));
 }

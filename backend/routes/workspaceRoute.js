@@ -1,6 +1,6 @@
 const express = require('express');
 const authMiddleware = require('../middleware/authMiddleware');
-const { createWorkspace, getMyWorkspaces, getInviteCode, joinWorkspace, getMembers, leaveWorkspace, deleteWorkspace } = require('../controllers/workspaceController');
+const { createWorkspace, getMyWorkspaces, getInviteCode, joinWorkspace, getMembers, removeMember, leaveWorkspace, deleteWorkspace } = require('../controllers/workspaceController');
 
 const router = express.Router();
 
@@ -10,6 +10,7 @@ router.get('/:id/invite',     authMiddleware, getInviteCode);
 router.post('/join',          authMiddleware, joinWorkspace);
 router.get('/:id/members',    authMiddleware, getMembers);
 router.delete('/:id/leave',   authMiddleware, leaveWorkspace);
+router.delete('/:id/members/:userId', authMiddleware, removeMember);
 router.delete('/:id',         authMiddleware, deleteWorkspace);
 
 module.exports = router;

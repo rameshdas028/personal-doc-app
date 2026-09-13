@@ -30,63 +30,88 @@ async function findDocAcrossStores(docId, userId) {
 const analyzeDocument = async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  let analysis = { doc_type: 'document', confident: false, description: '', extracted_text: '', questions: [], ai_failed: true };
+  let analysis = { docType: 'document', confident: false, description: '', extractedText: '', questions: [], aiFailed: true };
   try {
     analysis = await analyzeFile(req.file.path, req.file.mimetype);
   } catch (err) {
     console.warn('[Analyze] AI failed:', err.message);
   }
 
-  if (analysis.is_informative === false) {
+  if (analysis.isInformative === false) {
     try { fs.unlinkSync(req.file.path); } catch (e) {}
     return res.status(422).json({ error: 'This image has no document value. Only upload documents, bills, IDs, certificates, or official papers.' });
   }
 
-  res.json({ success: true, temp_path: req.file.path, temp_filename: req.file.filename, mimetype: req.file.mimetype, original_name: req.file.originalname, needs_purpose: true, ...analysis });
+  res.json({
+    success: true,
+    tempPath: req.file.path,
+    tempFilename: req.file.filename,
+    mimetype: req.file.mimetype,
+    originalName: req.file.originalname,
+    needsPurpose: true,
+    ...analysis,
+  });
 };
 
 const uploadDocument = async (req, res) => {
-  const { temp_path, temp_filename, mimetype, doc_type, label, purpose, extra_info, ai_description, extracted_text, category, group_name, period, expiry_date, workspace_id } = req.body;
+  const { tempPath, tempFilename, mimetype, docType, label, purpose, extraInfo, aiDescription, extractedText, category, groupName, period, expiryDate, workspaceId } = req.body;
   const userId = req.userId;
 
-  if (workspace_id) {
-    const mem = await WorkspaceMember.findOne({ workspaceId: workspace_id, userId, status: 'active' });
+  if (workspaceId) {
+    const mem = await WorkspaceMember.findOne({ workspaceId, userId, status: 'active' });
     if (!mem) return res.status(403).json({ error: 'Not a member of this workspace' });
   }
 
-  if (!temp_path || !fs.existsSync(temp_path)) return res.status(400).json({ error: 'File not found, please re-upload' });
-  if (!doc_type) return res.status(400).json({ error: 'doc_type is required' });
+  if (!tempPath || !fs.existsSync(tempPath)) return res.status(400).json({ error: 'File not found, please re-upload' });
+  if (!docType) return res.status(400).json({ error: 'docType is required' });
 
-  const hash = fileHash(temp_path);
-  const storeId = workspace_id || userId;
+  const hash = fileHash(tempPath);
+  const storeId = workspaceId || userId;
 
   const exactDuplicate = await getDocumentByHash(hash, storeId);
   if (exactDuplicate) return res.json({ success: true, action: 'unchanged', document: exactDuplicate });
 
-  const sameType = await getDocumentsByType(doc_type, storeId);
-  const sameGroup = sameType.filter(d => (d.group_name || '') === (group_name || ''));
+  const sameType = await getDocumentsByType(docType, storeId);
+  const sameGroup = sameType.filter(d => (d.groupName || '') === (groupName || ''));
 
   if (sameGroup.length > 0) {
     const old = sameGroup[0];
     try { fs.unlinkSync(old.filepath); } catch (e) {}
-    await removeDocument(old.doc_id, storeId);
-    const doc = { id: parseInt(old.doc_id), user_id: userId, workspace_id: workspace_id || '', doc_type, category: category || old.category || 'other', group_name: group_name || old.group_name || '', period: period || old.period || '', expiry_date: expiry_date || old.expiry_date || '', is_favourite: old.is_favourite === 'true', label: label || old.label || '', purpose: purpose || old.purpose || '', extra_info: extra_info || '', ai_description: ai_description || old.ai_description || '', extracted_text: extracted_text || old.extracted_text || '', filename: temp_filename, filepath: temp_path, filehash: hash, mimetype, created_at: old.created_at };
+    await removeDocument(old.docId, storeId);
+    const doc = {
+      id: parseInt(old.docId), userId, workspaceId: workspaceId || '', docType,
+      category: category || old.category || 'other', groupName: groupName || old.groupName || '',
+      period: period || old.period || '', expiryDate: expiryDate || old.expiryDate || '',
+      isFavourite: old.isFavourite === 'true', label: label || old.label || '',
+      purpose: purpose || old.purpose || '', extraInfo: extraInfo || '',
+      aiDescription: aiDescription || old.aiDescription || '',
+      extractedText: extractedText || old.extractedText || '',
+      filename: tempFilename, filepath: tempPath, filehash: hash, mimetype, createdAt: old.createdAt,
+    };
     await upsertDocument(doc, storeId);
     return res.json({ success: true, action: 'updated', document: doc });
   }
 
   const id = generateId();
-  const doc = { id, user_id: userId, workspace_id: workspace_id || '', doc_type, category: category || 'other', group_name: group_name || '', period: period || '', expiry_date: expiry_date || '', is_favourite: false, label: label || '', purpose: purpose || '', extra_info: extra_info || '', ai_description: ai_description || '', extracted_text: extracted_text || '', filename: temp_filename, filepath: temp_path, filehash: hash, mimetype, created_at: new Date().toISOString() };
+  const doc = {
+    id, userId, workspaceId: workspaceId || '', docType,
+    category: category || 'other', groupName: groupName || '',
+    period: period || '', expiryDate: expiryDate || '',
+    isFavourite: false, label: label || '', purpose: purpose || '',
+    extraInfo: extraInfo || '', aiDescription: aiDescription || '',
+    extractedText: extractedText || '', filename: tempFilename,
+    filepath: tempPath, filehash: hash, mimetype, createdAt: new Date().toISOString(),
+  };
   await upsertDocument(doc, storeId);
   res.json({ success: true, action: 'created', document: doc });
 };
 
 const listDocuments = async (req, res) => {
-  const { workspace_id } = req.query;
-  if (workspace_id) {
-    const mem = await WorkspaceMember.findOne({ workspaceId: workspace_id, userId: req.userId, status: 'active' });
+  const { workspaceId } = req.query;
+  if (workspaceId) {
+    const mem = await WorkspaceMember.findOne({ workspaceId, userId: req.userId, status: 'active' });
     if (!mem) return res.status(403).json({ error: 'Not a member' });
-    return res.json({ documents: await getDocumentsByUser(workspace_id) });
+    return res.json({ documents: await getDocumentsByUser(workspaceId) });
   }
   res.json({ documents: await getDocumentsByUser(req.userId) });
 };
@@ -97,26 +122,26 @@ const getExpiringDocuments = async (req, res) => {
   const now = new Date();
   const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   const expiring = docs.filter(d => {
-    if (!d.expiry_date) return false;
-    const exp = new Date(d.expiry_date);
+    if (!d.expiryDate) return false;
+    const exp = new Date(d.expiryDate);
     return !isNaN(exp.getTime()) && exp >= now && exp <= cutoff;
-  }).map(d => ({ ...d, days_left: Math.ceil((new Date(d.expiry_date) - now) / (1000 * 60 * 60 * 24)) }));
+  }).map(d => ({ ...d, daysLeft: Math.ceil((new Date(d.expiryDate) - now) / (1000 * 60 * 60 * 24)) }));
   res.json({ expiring });
 };
 
 const toggleFavourite = async (req, res) => {
   const { doc, storeId } = await findDocAcrossStores(req.params.id, req.userId);
   if (!doc) return res.status(404).json({ error: 'Not found' });
-  const newVal = doc.is_favourite !== 'true';
-  await upsertDocument({ ...doc, id: doc.doc_id, user_id: req.userId, is_favourite: newVal, extracted_text: doc.extracted_text || '' }, storeId);
-  res.json({ success: true, is_favourite: newVal });
+  const newVal = doc.isFavourite !== 'true';
+  await upsertDocument({ ...doc, id: doc.docId, userId: req.userId, isFavourite: newVal, extractedText: doc.extractedText || '' }, storeId);
+  res.json({ success: true, isFavourite: newVal });
 };
 
 const deleteDocument = async (req, res) => {
   const { doc, storeId } = await findDocAcrossStores(req.params.id, req.userId);
   if (!doc) return res.status(404).json({ error: 'Not found' });
   try { fs.unlinkSync(doc.filepath); } catch (e) {}
-  await removeDocument(doc.doc_id, storeId);
+  await removeDocument(doc.docId, storeId);
   res.json({ success: true });
 };
 

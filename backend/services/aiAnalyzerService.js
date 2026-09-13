@@ -8,31 +8,31 @@ const PROMPT = `You are a document scanner. Analyze the provided document conten
 
 Respond ONLY in this exact JSON format:
 {
-  "is_informative": <true if this is a document/certificate/bill/ID/medical record/resume/official paper — false if it's a personal photo, selfie, group photo, random image with no document value>,
-  "doc_type": "<known types: aadhar, pan, driving_license, passport, passport_photo, medical_slip — else invent snake_case like 'salary_slip', 'gas_bill', 'resume', 'insurance_policy'>",
+  "isInformative": <true if this is a document/certificate/bill/ID/medical record/resume/official paper — false if personal photo/selfie/random image>,
+  "docType": "<known types: aadhar, pan, drivingLicense, passport, passportPhoto, medicalSlip — else camelCase like 'salarySlip', 'gasBill', 'resume', 'insurancePolicy'>",
   "category": "<one of: identity, bills, income, medical, vehicle, insurance, education, legal, other>",
-  "group_name": "<specific entity name for grouping — e.g. 'HP Gas', 'TCS', 'Apollo Hospital', 'HDFC Bank', 'Aadhar' — extract from document, keep short>",
-  "period": "<month+year if present e.g. 'Jan 2025', 'Mar 2025' — else null>",
-  "expiry_date": "<the single most relevant expiry/deadline date in YYYY-MM-DD format — else null>",
+  "groupName": "<entity name for grouping — e.g. 'HP Gas', 'TCS', 'Apollo Hospital', 'HDFC Bank' — extract from document>",
+  "period": "<month+year if present e.g. 'Jan 2025' — else null>",
+  "expiryDate": "<most relevant expiry date in YYYY-MM-DD format — else null>",
   "confident": <true or false>,
   "description": "<1-line summary e.g. 'HP Gas Bill for Feb 2025 — Ramesh Kumar'>",
-  "extracted_text": "<ALL text: name, ID numbers, DOB, address, issuer, doctor, hospital, amounts, dates — everything>",
+  "extractedText": "<ALL text: name, ID numbers, DOB, address, issuer, amounts, dates — everything>",
   "questions": []
 }
 
 Rules:
-- is_informative: false for selfies, personal photos, group photos, random images
-- group_name: extract the REAL entity name from doc
+- isInformative: false for selfies, personal photos, group photos, random images
+- groupName: extract the REAL entity name from doc
 - category must be one of the listed values
-- extracted_text must be thorough — used for search
-- For unknown docs: invent a descriptive snake_case doc_type — NEVER use 'other'
+- extractedText must be thorough — used for search
+- For unknown docs: invent a descriptive camelCase docType — NEVER use 'other'
 - Respond with ONLY the JSON, no extra text`;
 
 function parseResponse(text) {
   const clean = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
   const parsed = JSON.parse(clean);
-  if (parsed.doc_type) parsed.doc_type = parsed.doc_type.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-  if (!parsed.doc_type) parsed.doc_type = 'document';
+  if (parsed.docType) parsed.docType = parsed.docType.replace(/[^a-zA-Z0-9]/g, '');
+  if (!parsed.docType) parsed.docType = 'document';
   return parsed;
 }
 

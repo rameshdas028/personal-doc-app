@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import ChatWindow from './ChatWindow';
 import ChatInput from './ChatInput';
 import DocListPanel from './DocListPanel';
+import WorkspaceInfoPanel from './WorkspaceInfoPanel';
 import { useTheme } from '@/components/ThemeProvider';
 
 export interface Message {
@@ -271,6 +272,8 @@ export default function ChatScreen() {
   const [activeId, setActiveId] = useState<string | null>('personal');
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [showDrive, setShowDrive] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
   const [showChat, setShowChat] = useState(false); // mobile: show right panel
   const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string; question: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -285,7 +288,14 @@ export default function ChatScreen() {
   }
 
   useEffect(() => { loadWorkspaces(); loadExpiryAlerts(); }, []);
-  useEffect(() => { if (activeId) loadDocs(); lastCategoryRef.current = null; lastFolderDocsRef.current = []; setPendingClarification(null); }, [activeId]);
+  useEffect(() => { if (activeId) loadDocs(); lastCategoryRef.current = null; lastFolderDocsRef.current = []; setPendingClarification(null); setShowInfo(false); if (activeWorkspace) loadMembers(); }, [activeId]);
+
+  async function loadMembers() {
+    try {
+      const data = await apiFetch(`/api/workspaces/${activeWorkspace?.id}/members`, {}, token);
+      setMembers(data.members || []);
+    } catch {}
+  }
 
   async function loadWorkspaces() {
     try {
@@ -422,16 +432,25 @@ export default function ChatScreen() {
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               </button>
-              <Avatar name={activeName} size={40} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{activeName}</div>
-                <div style={{ fontSize: 12, color: 'var(--accent)' }}>{docs.length} documents</div>
+              {/* Clickable avatar/name — opens info panel for workspaces */}
+              <div onClick={() => activeWorkspace && setShowInfo(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: activeWorkspace ? 'pointer' : 'default' }}
+              >
+                <Avatar name={activeName} size={40} />
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>{activeName}</div>
+                  <div style={{ fontSize: 12, color: 'var(--accent)' }}>
+                    {activeWorkspace ? `${members?.length || ''} members · ${docs.length} docs` : `${docs.length} documents`}
+                  </div>
+                </div>
               </div>
               <button onClick={() => setShowDrive(v => !v)}
                 style={{ background: showDrive ? 'var(--accent)' : 'none', border: 'none', cursor: 'pointer', color: showDrive ? '#fff' : 'var(--text2)', padding: '6px 10px', borderRadius: 8, fontSize: 13, fontWeight: 500 }}
               >🗂️</button>
             </div>
 
+          <div style={{ flex: 1, display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             {/* Body */}
             {showDrive ? (
               <DocListPanel
@@ -456,6 +475,20 @@ export default function ChatScreen() {
                 />
               </>
             )}
+            </div>
+
+            {/* Workspace info panel */}
+            {showInfo && activeWorkspace && (
+              <WorkspaceInfoPanel
+                workspace={activeWorkspace}
+                token={token!}
+                docCount={docs.length}
+                onClose={() => setShowInfo(false)}
+                onWorkspaceUpdated={(ws) => { setActiveWorkspace(ws); setWorkspaces(prev => prev.map(w => w.id === ws.id ? ws : w)); }}
+                onWorkspaceDeleted={() => { setShowInfo(false); setActiveWorkspace(null); setActiveId(null); setWorkspaces(prev => prev.filter(w => w.id !== activeWorkspace.id)); }}
+              />
+            )}
+          </div>
           </div>
         )}
       </div>

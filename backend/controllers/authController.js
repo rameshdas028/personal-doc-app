@@ -53,7 +53,7 @@ const forgotPassword = async (req, res) => {
   await User.updateOne({ phone }, { resetOtp: otp, resetOtpExp: new Date(Date.now() + 5 * 60 * 1000) });
 
   console.log(`[DEV] Reset OTP for ${phone}: ${otp}`);
-  res.json({ success: true, message: 'OTP sent', dev_otp: otp });
+  res.json({ success: true, message: 'OTP sent', devOtp: otp });
 };
 
 const resetPassword = async (req, res) => {
