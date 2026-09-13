@@ -95,7 +95,7 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
   }
 
   return (
-    <div style={{ width: 320, height: '100vh', background: 'var(--bg2)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }}>
+    <div style={{ width: 320, height: '100vh', background: 'var(--bg2)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'hidden' }}>
 
       {/* Header */}
       <div style={{ padding: '14px 16px', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
@@ -136,7 +136,7 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
           </div>
         )}
 
-        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Group · {members.length} member{members.length !== 1 ? 's' : ''} · {docCount} docs</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Group · {members.length} member{members.length !== 1 ? 's' : ''} · {docCount} docs · <span style={{ color: isOwner ? 'var(--accent)' : 'var(--success)', fontWeight: 600 }}>{isOwner ? 'Owner' : 'Member'}</span></div>
       </div>
 
       {/* Invite code */}
@@ -159,7 +159,7 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
       )}
 
       {/* Members list */}
-      <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', flex: 1 }}>
+      <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', flex: 1, overflowY: 'auto' }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
           {members.length} Members
         </div>
@@ -201,8 +201,8 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
       {/* Actions */}
       <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
 
-        {/* Member: Leave Group */}
-        {workspace.role !== 'owner' && (
+        {/* Leave Group — visible to all members */}
+        {!isOwner && (
           confirmLeave ? (
             <div style={{ background: 'rgba(252,67,85,0.08)', borderRadius: 10, padding: '12px', border: '1px solid var(--error)' }}>
               <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 10, textAlign: 'center' }}>Leave "{workspace.name}"?</div>
@@ -221,9 +221,10 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
           )
         )}
 
-        {/* Owner: Delete Group */}
-        {workspace.role === 'owner' && (
+        {/* Owner only: Delete Group */}
+        {isOwner && (
           <>
+            <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', marginBottom: 2 }}>You are the owner. Delete group to remove it.</div>
             {!showDeleteConfirm ? (
               <button onClick={() => setShowDeleteConfirm(true)}
                 style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--error)', background: 'transparent', color: 'var(--error)', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}
