@@ -35,6 +35,8 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null); // userId to remove
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const isOwner = workspace.role === 'owner';
 
@@ -174,14 +176,23 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
             </span>
             {/* Remove member (owner only, not self) */}
             {isOwner && m.role !== 'owner' && (
-              <button onClick={() => removeMember(m.userId)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 4, opacity: 0.6, flexShrink: 0 }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
-                title="Remove member"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="23" y2="14"/><line x1="23" y1="8" x2="17" y2="14"/></svg>
-              </button>
+              confirmRemove === m.userId ? (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => { removeMember(m.userId); setConfirmRemove(null); }}
+                    style={{ background: 'var(--error)', border: 'none', borderRadius: 6, padding: '4px 8px', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>Remove</button>
+                  <button onClick={() => setConfirmRemove(null)}
+                    style={{ background: 'var(--bg4)', border: 'none', borderRadius: 6, padding: '4px 8px', color: 'var(--text2)', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmRemove(m.userId)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 4, opacity: 0.6, flexShrink: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
+                  title="Remove member"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="23" y2="14"/><line x1="23" y1="8" x2="17" y2="14"/></svg>
+                </button>
+              )
             )}
           </div>
         ))}
@@ -189,15 +200,29 @@ export default function WorkspaceInfoPanel({ workspace, token, docCount, onClose
 
       {/* Actions */}
       <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
-        {!isOwner && (
-          <button onClick={leaveWorkspace}
-            style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--error)', background: 'transparent', color: 'var(--error)', fontSize: 13, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-            Leave Group
-          </button>
+
+        {/* Member: Leave Group */}
+        {workspace.role !== 'owner' && (
+          confirmLeave ? (
+            <div style={{ background: 'rgba(252,67,85,0.08)', borderRadius: 10, padding: '12px', border: '1px solid var(--error)' }}>
+              <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 10, textAlign: 'center' }}>Leave "{workspace.name}"?</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setConfirmLeave(false)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={leaveWorkspace} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--error)', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Leave</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmLeave(true)}
+              style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--error)', background: 'transparent', color: 'var(--error)', fontSize: 13, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+              Leave Group
+            </button>
+          )
         )}
-        {isOwner && (
+
+        {/* Owner: Delete Group */}
+        {workspace.role === 'owner' && (
           <>
             {!showDeleteConfirm ? (
               <button onClick={() => setShowDeleteConfirm(true)}
